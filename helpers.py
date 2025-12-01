@@ -1,6 +1,5 @@
 # helpers.py
 import os
-
 import requests
 import pandas as pd
 from datetime import datetime, date, timedelta, timezone
@@ -11,13 +10,8 @@ from openpyxl.utils import get_column_letter
 from config import (
     BASE_URL,
     API_TOKEN,
-    START_DATE,
-    END_DATE,
     ISSUE_QUERY,
-    USE_GROUP,
-    GROUP_ID,
-    USER_LOGINS,
-    OUTPUT_XLSX,
+    BASE_FILE_NAME,
 )
 
 HEADERS_YT = {
@@ -36,20 +30,45 @@ def format_date_ru(d: date) -> str:
 
 # ======================== HUB / USERS ========================================
 
-def get_group_users_from_hub():
+def get_group_users_by_id(group_id: str):
     """
-    Получаем логины пользователей из группы Hub.
-    Для YouTrack Cloud hub-URL обычно: BASE_URL + '/hub'
+    Получаем логины пользователей из группы Hub по ID.
     """
     hub_base = BASE_URL.rstrip("/") + "/hub"
-    url = f"{hub_base}/api/rest/usergroups/{GROUP_ID}"
+    url = f"{hub_base}/api/rest/usergroups/{group_id}"
     params = {"fields": "id,name,users(login,name)"}
     resp = requests.get(url, headers=HEADERS_YT, params=params)
     resp.raise_for_status()
     data = resp.json()
     users = data.get("users", [])
     logins = [u["login"] for u in users if "login" in u]
-    print(f"Группа '{data.get('name')}', пользователей: {len(logins)}")
+    print(f"Группа по ID '{data.get('name')}', пользователей: {len(logins)}")
+    return logins
+
+
+def get_group_users_by_name(group_name: str):
+    """
+    Получаем логины пользователей по имени группы в Hub.
+    Если несколько групп — берём точное совпадение по имени, иначе первую.
+    """
+    hub_base = BASE_URL.rstrip("/") + "/hub"
+    url = f"{hub_base}/api/rest/usergroups"
+    params = {
+        "query": group_name,
+        "fields": "id,name,users(login,name)",
+    }
+    resp = requests.get(url, headers=HEADERS_YT, params=params)
+    resp.raise_for_status()
+    groups = resp.json()
+
+    if not groups:
+        raise RuntimeError(f"Группа '{group_name}' не найдена в Hub")
+
+    group = next((g for g in groups if g.get("name") == group_name), groups[0])
+
+    users = group.get("users", [])
+    logins = [u["login"] for u in users if "login" in u]
+    print(f"Группа по имени '{group.get('name')}', пользователей: {len(logins)}")
     return logins
 
 
@@ -81,18 +100,20 @@ def fetch_users_map():
             break
         skip += len(batch)
 
-    print(f"Загружено пользователей (login->FIO): {len(users_map)}")
+    print(f"Загружено пользователей (login->ФИО): {len(users_map)}")
     return users_map
 
 
 # ======================== WORK ITEMS =========================================
 
-def fetch_work_items_for_users(user_logins):
+def fetch_work_items_for_users(user_logins, start_date: date, end_date: date, issue_query: str = ""):
     """
-    Тянем work items по всем пользователям за период START_DATE..END_DATE,
-    с фильтром по задачам ISSUE_QUERY.
+    Тянем work items по всем пользователям за период start_date..end_date,
+    с фильтром по задачам issue_query (если задан).
     """
     all_items = []
+    query = issue_query or ISSUE_QUERY or ""
+
     for login in user_logins:
         skip = 0
         while True:
@@ -102,9 +123,9 @@ def fetch_work_items_for_users(user_logins):
                     "duration(minutes),issue(idReadable,summary)"
                 ),
                 "author": login,
-                "startDate": START_DATE,
-                "endDate": END_DATE,
-                "query": ISSUE_QUERY,
+                "startDate": start_date.isoformat(),
+                "endDate": end_date.isoformat(),
+                "query": query,
                 "$top": 100,
                 "$skip": skip,
             }
@@ -127,13 +148,19 @@ def fetch_work_items_for_users(user_logins):
 
 # ======================== MATRIX / DATAFRAME ================================
 
-def build_timesheet_matrix(work_items, user_logins, users_map):
+def build_timesheet_matrix(
+    work_items,
+    user_logins,
+    users_map,
+    start_date: date,
+    end_date: date,
+):
     """
     Из списка work items строим pandas-DataFrame вида:
         ФИО × дата → часы (2 знака после запятой)
-    - по выходным нули НЕ ставим (ячейки будут пустыми),
-    - к выходным применим особую заливку в Excel,
-    - индекс — ФИО (fullName).
+    - по выходным нули НЕ ставим (ячейки пустые),
+    - индекс — ФИО (fullName),
+    - добавляем колонку 'Итого'.
     """
     records = []
     for wi in work_items:
@@ -156,34 +183,31 @@ def build_timesheet_matrix(work_items, user_logins, users_map):
             "minutes": duration,
         })
 
-    # Если нет записей вообще — делаем пустую матрицу (все нули/пусто)
+    # полный список дат периода
+    all_days = []
+    cur = start_date
+    while cur <= end_date:
+        all_days.append(cur)
+        cur += timedelta(days=1)
+
+    # целевые имена (ФИО) в порядке логинов
+    target_names = [users_map.get(login, login) for login in user_logins]
+
+    # Если нет записей вовсе — пустая матрица с нулями (в выходные пусто)
     if not records:
         print("Нет списаний за указанный период.")
-        start = datetime.strptime(START_DATE, "%Y-%m-%d").date()
-        end = datetime.strptime(END_DATE, "%Y-%m-%d").date()
-        days = []
-        cur = start
-        while cur <= end:
-            days.append(cur)
-            cur += timedelta(days=1)
-
-        # индекс — ФИО (по карте users_map, fallback login)
-        index_names = [users_map.get(l, l) for l in user_logins]
-
-        df = pd.DataFrame(0.0, index=index_names, columns=days)
+        df = pd.DataFrame(0.0, index=target_names, columns=all_days)
         df.index.name = "ФИО"
-
-        # по выходным сделаем пустые ячейки вместо нулей
+        # по выходным — пустые ячейки
         for col in df.columns:
             if isinstance(col, date) and col.weekday() >= 5:
                 df[col] = pd.NA
-
         df["Итого"] = 0.0
-        return df
+        return df.round(2)
 
     df = pd.DataFrame(records)
 
-    # pivot: минуты → часы, пока без Total
+    # pivot: минуты → часы
     pivot = df.pivot_table(
         index="user",
         columns="date",
@@ -192,32 +216,19 @@ def build_timesheet_matrix(work_items, user_logins, users_map):
         fill_value=0
     ) / 60.0  # часы
 
-    # период целиком
-    start = datetime.strptime(START_DATE, "%Y-%m-%d").date()
-    end = datetime.strptime(END_DATE, "%Y-%m-%d").date()
-    all_days = []
-    cur = start
-    while cur <= end:
-        all_days.append(cur)
-        cur += timedelta(days=1)
-
     # добавляем недостающие даты
     for d in all_days:
         if d not in pivot.columns:
             pivot[d] = 0.0
 
-    # индекс должен содержать всех нужных пользователей,
-    # даже если у них нет ни одного списания в этот период.
-    target_names = [users_map.get(login, login) for login in user_logins]
+    # добавляем всех пользователей
     for name in target_names:
         if name not in pivot.index:
             pivot.loc[name] = 0.0
 
-    # сортировка дат по возрастанию
+    # сортировка: даты и строки в нужном порядке
     date_cols = sorted([c for c in pivot.columns if isinstance(c, date)])
     pivot = pivot[date_cols]
-
-    # порядок строк = как в списке user_logins
     pivot = pivot.reindex(target_names)
 
     # по выходным вместо 0 делаем пустые ячейки
@@ -225,12 +236,11 @@ def build_timesheet_matrix(work_items, user_logins, users_map):
         if isinstance(col, date) and col.weekday() >= 5:
             pivot.loc[pivot[col] == 0, col] = pd.NA
 
-    # добавляем итог по человеку (учитывая, что NaN не считается)
+    # добавляем итог по строкам
     pivot["Итого"] = pivot.sum(axis=1, numeric_only=True)
 
     # округляем до двух знаков
     pivot = pivot.round(2)
-
     pivot.index.name = "ФИО"
     return pivot
 
@@ -273,6 +283,13 @@ def build_details_sheet(work_items, users_map):
 
 # ======================== EXCEL / FORMATTING ================================
 
+def build_output_filename(start_date: date, end_date: date) -> str:
+    """
+    Формирует базовое имя файла: timesheet_YYYY-MM-DD_YYYY-MM-DD.xlsx
+    """
+    return f"{BASE_FILE_NAME}_{start_date.isoformat()}_{end_date.isoformat()}.xlsx"
+
+
 def get_available_filename(base_name: str) -> str:
     """
     Проверяет, существует ли файл. Если существует — добавляет (1), (2), ...
@@ -291,16 +308,17 @@ def get_available_filename(base_name: str) -> str:
         i += 1
 
 
-def write_excel_with_formatting(timesheet_df, details_df):
+def write_excel_with_formatting(timesheet_df, details_df, start_date: date, end_date: date):
     """
     Пишем Excel:
-    - если файл существует → 'timesheet.xlsx' -> 'timesheet (1).xlsx';
+    - имя файла: BASE_FILE_NAME_YYYY-MM-DD_YYYY-MM-DD.xlsx (+ (1), (2), ... при коллизии);
     - выходные дни подсвечены светло-оранжевым;
     - нули подсвечены бледно-красным;
     - в выходные дни нули не показываются (ячейки пустые);
     - заголовки дат локализованы: 'Пн 03.11'.
     """
-    filename = get_available_filename(OUTPUT_XLSX)
+    base_filename = build_output_filename(start_date, end_date)
+    filename = get_available_filename(base_filename)
 
     with pd.ExcelWriter(filename, engine="openpyxl") as writer:
         # Основная таблица
@@ -315,7 +333,6 @@ def write_excel_with_formatting(timesheet_df, details_df):
 
         header_row = 1         # строка с заголовками
         data_start_row = 2     # первая строка данных
-        index_col = 1          # колонка с ФИО
         first_data_col = 2     # первая колонка данных (первый столбец из df.columns)
 
         # Цвета
