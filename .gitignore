@@ -54,3 +54,5 @@ tmp/
 
 *.xls
 *.xlsx
+
+.env

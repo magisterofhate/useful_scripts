@@ -1,20 +1,35 @@
-# ==== CONFIG =================================================================
+# config.py
+import os
+from dotenv import load_dotenv
 
-# URL YouTrack
-BASE_URL = "https://youtrack.ispsystem.net/"
+# Загружаем переменные из .env (если он есть рядом)
+load_dotenv()
 
-# Персональный токен из профиля YouTrack
-API_TOKEN = "perm-YS5taWxpbmV2c2tpaQ==.NTgtOTU=.vkjYV9lHy4hFn2HrNvXfzAtSSNUbSM"
+# URL твоего YouTrack (БЕЗ /api в конце)
+# Примеры:
+#   https://example.youtrack.cloud
+#   https://example.myjetbrains.com/youtrack
+BASE_URL = os.getenv("YOUTRACK_BASE_URL")
 
-# Фильтр по задачам (можно оставить пустым)
-ISSUE_QUERY = "" # "project: VMmanager"
+# Персональный токен из профиля YouTrack (scope: YouTrack, Hub)
+API_TOKEN = os.getenv("YOUTRACK_API_TOKEN")
 
-# ID группы по умолчанию (из Hub),
-# используется, если НЕ указаны ни --hub-group, ни --users.
-DEFAULT_HUB_GROUP_ID = "5ef86c95-89e1-453f-8e20-d6f19e30f646"  # если USE_GROUP=True
+if not BASE_URL:
+    raise RuntimeError("Не задан YOUTRACK_BASE_URL в .env или окружении")
+
+if not API_TOKEN:
+    raise RuntimeError("Не задан YOUTRACK_API_TOKEN в .env или окружении")
+
+# Фильтр по задачам, как в поисковой строке YouTrack.
+# Можно оставить пустым "" или, например, "project: VMmanager"
+ISSUE_QUERY = os.getenv("YOUTRACK_ISSUE_QUERY", "project: VMmanager")
 
 # Базовое имя файла отчёта (без дат и расширения)
 # Итоговый файл будет вида: timesheet_YYYY-MM-DD_YYYY-MM-DD.xlsx
-BASE_FILE_NAME = "timesheet"
+BASE_FILE_NAME = os.getenv("TIMESHEET_BASE_NAME", "timesheet")
 
-# ==== END CONFIG =============================================================
+# ID группы по умолчанию (из Hub),
+# используется, если НЕ указаны ни --hub-group, ни --users.
+DEFAULT_HUB_GROUP_ID = os.getenv("DEFAULT_HUB_GROUP_ID")
+if not DEFAULT_HUB_GROUP_ID:
+    raise RuntimeError("Не задан DEFAULT_HUB_GROUP_ID в .env или окружении")
