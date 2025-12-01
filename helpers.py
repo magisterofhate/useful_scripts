@@ -1,4 +1,6 @@
 # helpers.py
+import os
+
 import requests
 import pandas as pd
 from datetime import datetime, date, timedelta, timezone
@@ -22,6 +24,14 @@ HEADERS_YT = {
     "Authorization": f"Bearer {API_TOKEN}",
     "Accept": "application/json",
 }
+
+WEEKDAY_RU_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+
+
+def format_date_ru(d: date) -> str:
+    """Форматируем дату для заголовка колонки: 'Пн 03.11'."""
+    wd = WEEKDAY_RU_SHORT[d.weekday()]
+    return f"{wd} {d:%d.%m}"
 
 
 # ======================== HUB / USERS ========================================
@@ -263,15 +273,36 @@ def build_details_sheet(work_items, users_map):
 
 # ======================== EXCEL / FORMATTING ================================
 
+def get_available_filename(base_name: str) -> str:
+    """
+    Проверяет, существует ли файл. Если существует — добавляет (1), (2), ...
+    Возвращает доступное имя файла.
+    """
+    if not os.path.exists(base_name):
+        return base_name
+
+    name, ext = os.path.splitext(base_name)
+
+    i = 1
+    while True:
+        new_name = f"{name} ({i}){ext}"
+        if not os.path.exists(new_name):
+            return new_name
+        i += 1
+
+
 def write_excel_with_formatting(timesheet_df, details_df):
     """
     Пишем Excel:
-    - лист 'Timesheet' с заливкой выходных колонок (светло-оранжевый),
-    - нулевые значения (0) подсвечиваем бледно-красным,
-      при этом для выходных нули уже превращены в пустые ячейки (NaN),
-    - лист 'Details' без особого форматирования.
+    - если файл существует → 'timesheet.xlsx' -> 'timesheet (1).xlsx';
+    - выходные дни подсвечены светло-оранжевым;
+    - нули подсвечены бледно-красным;
+    - в выходные дни нули не показываются (ячейки пустые);
+    - заголовки дат локализованы: 'Пн 03.11'.
     """
-    with pd.ExcelWriter(OUTPUT_XLSX, engine="openpyxl") as writer:
+    filename = get_available_filename(OUTPUT_XLSX)
+
+    with pd.ExcelWriter(filename, engine="openpyxl") as writer:
         # Основная таблица
         timesheet_df.to_excel(writer, sheet_name="Timesheet")
         # Детализация
@@ -280,50 +311,54 @@ def write_excel_with_formatting(timesheet_df, details_df):
         wb = writer.book
         ws = writer.sheets["Timesheet"]
 
-        n_rows, n_cols = timesheet_df.shape  # n_rows = кол-во людей, n_cols = дней + 'Итого'
+        n_rows, n_cols = timesheet_df.shape  # строки = сотрудники, колонки = даты + "Итого"
 
-        header_row = 1         # строка заголовков DataFrame
+        header_row = 1         # строка с заголовками
         data_start_row = 2     # первая строка данных
         index_col = 1          # колонка с ФИО
-        first_data_col = 2     # первая дата (или первый столбец значений)
+        first_data_col = 2     # первая колонка данных (первый столбец из df.columns)
 
-        # Заливка для выходных (светло-оранжевый)
+        # Цвета
         weekend_fill = PatternFill(
             start_color="FFF4CC", end_color="FFF4CC", fill_type="solid"
         )
-        # Заливка для нулей (бледно-красная)
         zero_fill = PatternFill(
             start_color="F8CBAD", end_color="F8CBAD", fill_type="solid"
         )
 
-        # 1. Подсвечиваем выходные столбцы (по заголовкам-датам)
+        # 1. Локализуем заголовки дат и подсвечиваем выходные столбцы
         for col_idx, col_name in enumerate(timesheet_df.columns):
-            # col_idx: 0..n_cols-1, Excel-колонка = first_data_col + col_idx
-            if isinstance(col_name, date) and col_name.weekday() >= 5:
-                excel_col = first_data_col + col_idx
-                col_letter = get_column_letter(excel_col)
+            excel_col = first_data_col + col_idx
+            col_letter = get_column_letter(excel_col)
+            cell = ws[f"{col_letter}{header_row}"]
 
-                # Заголовок
-                ws[f"{col_letter}{header_row}"].fill = weekend_fill
+            if isinstance(col_name, date):
+                # локализованный заголовок
+                cell.value = format_date_ru(col_name)
 
-                # Все ячейки в этом столбце
-                for row in range(data_start_row, data_start_row + n_rows):
-                    ws.cell(row=row, column=excel_col).fill = weekend_fill
+                # если выходной — красим весь столбец
+                if col_name.weekday() >= 5:
+                    cell.fill = weekend_fill
+                    for row in range(data_start_row, data_start_row + n_rows):
+                        ws.cell(row=row, column=excel_col).fill = weekend_fill
+            else:
+                # например, колонка "Итого" — оставляем как есть
+                pass
 
-        # 2. Подсвечиваем нули бледно-красным (кроме выходных столбцов)
+        # 2. Подсветка нулей бледно-красным (кроме выходных столбцов)
         for row_idx in range(n_rows):
             excel_row = data_start_row + row_idx
 
             for col_idx, col_name in enumerate(timesheet_df.columns):
                 excel_col = first_data_col + col_idx
-
-                # Пропускаем выходные столбцы (там нули уже превратили в NaN)
-                if isinstance(col_name, date) and col_name.weekday() >= 5:
-                    continue
-
                 cell = ws.cell(row=excel_row, column=excel_col)
-                # если значение 0 (int/float), подсвечиваем
-                if isinstance(cell.value, (int, float)) and cell.value == 0:
+
+                # выходной?
+                is_weekend = isinstance(col_name, date) and col_name.weekday() >= 5
+
+                # для выходных нули мы уже заменили на NaN в DataFrame,
+                # так что здесь трогаем только будни и "Итого"
+                if not is_weekend and isinstance(cell.value, (int, float)) and cell.value == 0:
                     cell.fill = zero_fill
 
-    print(f"Готово, Excel сохранён как {OUTPUT_XLSX}")
+    print(f"Готово, Excel сохранён как: {filename}")
