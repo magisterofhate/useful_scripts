@@ -83,12 +83,21 @@ def parse_args():
 
     parser.add_argument(
         "--hub-group",
-        help="Имя группы пользователей в Hub. Если указано — используем её."
+        action="append",
+        help=(
+            "Имя группы пользователей в Hub. "
+            "Можно указать несколько раз: "
+            '--hub-group "QA" --hub-group "Developers". '
+            "Если не указано и нет --users, используется DEFAULT_HUB_GROUP_ID из config.py."
+        ),
     )
     parser.add_argument(
         "--users",
-        help="Список логинов пользователей через запятую, например: ivanov,petrov,sidorov. "
-             "Используется, если не передан --hub-group."
+        help=(
+            "Список логинов пользователей через запятую, например: "
+            '"ivanov,petrov,sidorov". '
+            "Используется, если не передан --hub-group."
+        ),
     )
 
     return parser.parse_args()
@@ -101,17 +110,28 @@ def main():
     start_date, end_date = compute_period(args.period, args.start_date, args.end_date)
     print(f"Период отчёта: {start_date} .. {end_date}")
 
-    # 2. Определяем, каких пользователей брать
+    # 2. Определяем, каких пользователей брать и в каком порядке
     if args.users:
+        # Явный список логинов — приоритетнее всего
         user_logins = [u.strip() for u in args.users.split(",") if u.strip()]
         print(f"Используем логины из --users: {user_logins}")
 
     elif args.hub_group:
-        print(f"Ищем группу по имени: {args.hub_group}")
-        user_logins = get_group_users_by_name(args.hub_group)
+        # Несколько групп по имени. Пользователи из одной группы
+        # идут подряд, группы — в порядке указания в CLI.
+        user_logins: list[str] = []
+        print(f"Ищем группы по именам: {args.hub_group}")
+        for group_name in args.hub_group:
+            logins = get_group_users_by_name(group_name)
+            # добавляем логины, сохраняя порядок и убирая дубли
+            for login in logins:
+                if login not in user_logins:
+                    user_logins.append(login)
+        print(f"Итоговый список логинов по группам: {user_logins}")
 
     else:
-        print("Группа не указана → используем DEFAULT_HUB_GROUP_ID из config.py")
+        # Ни users, ни hub-group не указаны — берём default-группу по ID
+        print("Группы и явные пользователи не указаны → используем DEFAULT_HUB_GROUP_ID из config.py")
         user_logins = get_group_users_by_id(DEFAULT_HUB_GROUP_ID)
 
     if not user_logins:
@@ -130,6 +150,8 @@ def main():
     print(f"Всего work items: {len(work_items)}")
 
     # 5. Матрица timesheet (ФИО × даты)
+    # build_timesheet_matrix уже использует порядок user_logins
+    # → пользователи одной группы будут рядом.
     timesheet_df = build_timesheet_matrix(
         work_items=work_items,
         user_logins=user_logins,
@@ -141,7 +163,7 @@ def main():
     # 6. Детализация
     details_df = build_details_sheet(work_items, users_map)
 
-    # 7. Excel + форматирование и именем файла с датами периода
+    # 7. Excel + форматирование, имя файла включает даты периода
     write_excel_with_formatting(timesheet_df, details_df, start_date, end_date)
 
 
