@@ -508,7 +508,7 @@ def write_excel_with_formatting(timesheet_df, details_df, start_date: date, end_
                     if spent_val > period_val:
                         # переработка: зелёным
                         spent_cell.fill = green_fill
-                    elif spent_val < 0.8 * period_val:
+                    elif spent_val < 0.7 * period_val:
                         # менее 80%: #F08080
                         spent_cell.fill = low_fill
 
