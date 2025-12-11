@@ -111,10 +111,15 @@ def main():
     print(f"Период отчёта: {start_date} .. {end_date}")
 
     # 2. Определяем, каких пользователей брать и в каком порядке
+    login_to_group: dict[str, str] = {}
+
     if args.users:
         # Явный список логинов — приоритетнее всего
         user_logins = [u.strip() for u in args.users.split(",") if u.strip()]
         print(f"Используем логины из --users: {user_logins}")
+        # Для явного списка можно поставить группу, например 'manual' или пустую строку
+        for login in user_logins:
+            login_to_group[login] = ""
 
     elif args.hub_group:
         # Несколько групп по имени. Пользователи из одной группы
@@ -123,9 +128,9 @@ def main():
         print(f"Ищем группы по именам: {args.hub_group}")
         for group_name in args.hub_group:
             logins = get_group_users_by_name(group_name)
-            # добавляем логины, сохраняя порядок и убирая дубли
             for login in logins:
-                if login not in user_logins:
+                if login not in login_to_group:
+                    login_to_group[login] = group_name
                     user_logins.append(login)
         print(f"Итоговый список логинов по группам: {user_logins}")
 
@@ -133,6 +138,8 @@ def main():
         # Ни users, ни hub-group не указаны — берём default-группу по ID
         print("Группы и явные пользователи не указаны → используем DEFAULT_HUB_GROUP_ID из config.py")
         user_logins = get_group_users_by_id(DEFAULT_HUB_GROUP_ID)
+        for login in user_logins:
+            login_to_group[login] = DEFAULT_HUB_GROUP_ID  # или можно руками вписать читабельное имя
 
     if not user_logins:
         raise SystemExit("Список пользователей пуст — отчёт генерировать не из чего.")
@@ -150,8 +157,6 @@ def main():
     print(f"Всего work items: {len(work_items)}")
 
     # 5. Матрица timesheet (ФИО × даты)
-    # build_timesheet_matrix уже использует порядок user_logins
-    # → пользователи одной группы будут рядом.
     timesheet_df = build_timesheet_matrix(
         work_items=work_items,
         user_logins=user_logins,
@@ -160,11 +165,18 @@ def main():
         end_date=end_date,
     )
 
+    # Вставляем колонку "Группа" сразу справа от ФИО.
+    # Порядок строк в timesheet_df такой же, как в user_logins,
+    # потому что build_timesheet_matrix делает reindex по target_names.
+    group_column = [login_to_group.get(login, "") for login in user_logins]
+    timesheet_df.insert(0, "Группа", group_column)
+
     # 6. Детализация
     details_df = build_details_sheet(work_items, users_map)
 
-    # 7. Excel + форматирование, имя файла включает даты периода
+    # 7. Excel + форматирование и именем файла с датами периода
     write_excel_with_formatting(timesheet_df, details_df, start_date, end_date)
+
 
 
 if __name__ == "__main__":

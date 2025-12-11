@@ -4,7 +4,7 @@ import requests
 import pandas as pd
 from datetime import datetime, date, timedelta, timezone
 
-from openpyxl.styles import PatternFill
+from openpyxl.styles import PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 from config import (
@@ -325,10 +325,15 @@ def write_excel_with_formatting(timesheet_df, details_df, start_date: date, end_
     """
     Пишем Excel:
     - имя файла: BASE_FILE_NAME_YYYY-MM-DD_YYYY-MM-DD.xlsx (+ (1), (2), ... при коллизии);
-    - выходные дни подсвечены светло-оранжевым;
-    - нули подсвечены бледно-красным;
-    - в выходные дни нули не показываются (ячейки пустые);
-    - заголовки дат локализованы: 'Пн 03.11'.
+    - лист Timesheet:
+        - колонка A = ФИО, ширина под самое длинное ФИО;
+        - колонка B = Группа (мы добавили её в main.py);
+        - выходные дни подсвечены светло-оранжевым;
+        - нули в будни подсвечены бледно-красным;
+        - в выходные дни нули не показываются (ячейки пустые);
+        - между разными группами рисуется жирная горизонтальная линия;
+    - лист Details (подробные списания);
+    - лист group_members: ФИО, Списано часов за период, Часов в периоде.
     """
     base_filename = build_output_filename(start_date, end_date)
     filename = get_available_filename(base_filename)
@@ -342,11 +347,11 @@ def write_excel_with_formatting(timesheet_df, details_df, start_date: date, end_
         wb = writer.book
         ws = writer.sheets["Timesheet"]
 
-        n_rows, n_cols = timesheet_df.shape  # строки = сотрудники, колонки = даты + "Итого"
+        n_rows, n_cols = timesheet_df.shape  # строки = сотрудники, колонки = Группа + даты + "Итого"
 
         header_row = 1         # строка с заголовками
         data_start_row = 2     # первая строка данных
-        first_data_col = 2     # первая колонка данных (первый столбец из df.columns)
+        first_data_col = 2     # первая колонка данных (столбец A = индекс ФИО, B = "Группа")
 
         # Цвета
         weekend_fill = PatternFill(
@@ -355,6 +360,10 @@ def write_excel_with_formatting(timesheet_df, details_df, start_date: date, end_
         zero_fill = PatternFill(
             start_color="F8CBAD", end_color="F8CBAD", fill_type="solid"
         )
+
+        # 0. Ширина колонки ФИО (A) = длина макс ФИО + чуть воздуха
+        max_name_len = max((len(str(name)) for name in timesheet_df.index), default=10)
+        ws.column_dimensions["A"].width = max_name_len + 2
 
         # 1. Локализуем заголовки дат и подсвечиваем выходные столбцы
         for col_idx, col_name in enumerate(timesheet_df.columns):
@@ -372,7 +381,7 @@ def write_excel_with_formatting(timesheet_df, details_df, start_date: date, end_
                     for row in range(data_start_row, data_start_row + n_rows):
                         ws.cell(row=row, column=excel_col).fill = weekend_fill
             else:
-                # например, колонка "Итого" — оставляем как есть
+                # "Группа", "Итого" — оставляем как есть
                 pass
 
         # 2. Подсветка нулей бледно-красным (кроме выходных столбцов)
@@ -390,5 +399,53 @@ def write_excel_with_formatting(timesheet_df, details_df, start_date: date, end_
                 # так что здесь трогаем только будни и "Итого"
                 if not is_weekend and isinstance(cell.value, (int, float)) and cell.value == 0:
                     cell.fill = zero_fill
+
+        # 3. Жирная черта между группами (если групп больше одной)
+        if "Группа" in timesheet_df.columns:
+            groups = list(timesheet_df["Группа"])
+            # считаем уникальные непустые имена групп
+            unique_groups = {g for g in groups if g not in (None, "", " ")}
+            if len(unique_groups) > 1:
+                thick_side = Side(style="thick")
+                # идём по строкам, сравниваем текущую и следующую группу
+                for idx in range(len(groups) - 1):
+                    if groups[idx] != groups[idx + 1]:
+                        excel_row = data_start_row + idx
+                        for col in range(1, ws.max_column + 1):
+                            cell = ws.cell(row=excel_row, column=col)
+                            b = cell.border
+                            cell.border = Border(
+                                left=b.left,
+                                right=b.right,
+                                top=b.top,
+                                bottom=thick_side,
+                            )
+
+        # 4. Лист group_members
+        # считаем число рабочих дней в периоде (Пн–Пт)
+        work_days = 0
+        cur = start_date
+        while cur <= end_date:
+            if cur.weekday() < 5:
+                work_days += 1
+            cur += timedelta(days=1)
+        hours_in_period = work_days * 8
+
+        summary_rows = []
+        for fio in timesheet_df.index:
+            # "Итого" — общие часы по человеку
+            total_hours = timesheet_df.loc[fio, "Итого"]
+            try:
+                total_hours_val = float(total_hours) if pd.notna(total_hours) else 0.0
+            except Exception:
+                total_hours_val = 0.0
+            summary_rows.append({
+                "ФИО": fio,
+                "Списано часов за период": total_hours_val,
+                "Часов в периоде": hours_in_period,
+            })
+
+        summary_df = pd.DataFrame(summary_rows)
+        summary_df.to_excel(writer, sheet_name="group_members", index=False)
 
     print(f"Готово, Excel сохранён как: {filename}")
