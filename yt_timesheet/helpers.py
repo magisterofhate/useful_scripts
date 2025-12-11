@@ -333,7 +333,12 @@ def write_excel_with_formatting(timesheet_df, details_df, start_date: date, end_
         - в выходные дни нули не показываются (ячейки пустые);
         - между разными группами рисуется жирная горизонтальная линия;
     - лист Details (подробные списания);
-    - лист group_members: ФИО, Списано часов за период, Часов в периоде.
+    - лист group_members:
+        - ФИО, Группа, Списано часов за период, Часов в периоде;
+        - колонка ФИО по ширине самого длинного ФИО;
+        - заголовки колонок с временем расширены;
+        - Списано > часов в периоде → зелёным;
+        - Списано < 80% часов в периоде → #F08080.
     """
     base_filename = build_output_filename(start_date, end_date)
     filename = get_available_filename(base_filename)
@@ -361,7 +366,7 @@ def write_excel_with_formatting(timesheet_df, details_df, start_date: date, end_
             start_color="F8CBAD", end_color="F8CBAD", fill_type="solid"
         )
 
-        # 0. Ширина колонки ФИО (A) = длина макс ФИО + чуть воздуха
+        # 0. Ширина колонки ФИО (A) = длина макс ФИО + немного воздуха
         max_name_len = max((len(str(name)) for name in timesheet_df.index), default=10)
         ws.column_dimensions["A"].width = max_name_len + 2
 
@@ -400,14 +405,12 @@ def write_excel_with_formatting(timesheet_df, details_df, start_date: date, end_
                 if not is_weekend and isinstance(cell.value, (int, float)) and cell.value == 0:
                     cell.fill = zero_fill
 
-        # 3. Жирная черта между группами (если групп больше одной)
+        # 3. Жирная черта между группами (если групп более одной)
         if "Группа" in timesheet_df.columns:
             groups = list(timesheet_df["Группа"])
-            # считаем уникальные непустые имена групп
             unique_groups = {g for g in groups if g not in (None, "", " ")}
             if len(unique_groups) > 1:
                 thick_side = Side(style="thick")
-                # идём по строкам, сравниваем текущую и следующую группу
                 for idx in range(len(groups) - 1):
                     if groups[idx] != groups[idx + 1]:
                         excel_row = data_start_row + idx
@@ -439,13 +442,74 @@ def write_excel_with_formatting(timesheet_df, details_df, start_date: date, end_
                 total_hours_val = float(total_hours) if pd.notna(total_hours) else 0.0
             except Exception:
                 total_hours_val = 0.0
+
+            if "Группа" in timesheet_df.columns:
+                group_val = timesheet_df.loc[fio, "Группа"]
+            else:
+                group_val = ""
+
             summary_rows.append({
                 "ФИО": fio,
+                "Группа": group_val,
                 "Списано часов за период": total_hours_val,
                 "Часов в периоде": hours_in_period,
             })
 
         summary_df = pd.DataFrame(summary_rows)
         summary_df.to_excel(writer, sheet_name="group_members", index=False)
+
+        ws_summary = writer.sheets["group_members"]
+
+        # Ширина колонки ФИО на group_members
+        if not summary_df.empty:
+            max_name_len_summary = max((len(str(v)) for v in summary_df["ФИО"]), default=10)
+            ws_summary.column_dimensions["A"].width = max_name_len_summary + 2
+
+        # Чтобы заголовки колонок с временем были видны целиком — расширим их ширину
+        # Найдём индексы нужных колонок
+        col_index_map = {name: idx + 1 for idx, name in enumerate(summary_df.columns)}
+        spent_col_idx = col_index_map.get("Списано часов за период")
+        period_col_idx = col_index_map.get("Часов в периоде")
+
+        # Ширину под заголовки (просто делаем достаточно большой)
+        if spent_col_idx:
+            col_letter = get_column_letter(spent_col_idx)
+            ws_summary.column_dimensions[col_letter].width = max(
+                len("Списано часов за период") + 2, 25
+            )
+        if period_col_idx:
+            col_letter = get_column_letter(period_col_idx)
+            ws_summary.column_dimensions[col_letter].width = max(
+                len("Часов в периоде") + 2, 22
+            )
+
+        # Подсветка по условиям:
+        # - зелёным, если списано > часов в периоде
+        # - #F08080, если списано < 80% часов периода
+        green_fill = PatternFill(
+            start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"
+        )
+        low_fill = PatternFill(
+            start_color="F08080", end_color="F08080", fill_type="solid"
+        )
+
+        if spent_col_idx and period_col_idx:
+            n_summary_rows = len(summary_df)
+            for i in range(n_summary_rows):
+                excel_row = 2 + i  # данные начинаются со 2-й строки
+
+                spent_cell = ws_summary.cell(row=excel_row, column=spent_col_idx)
+                period_cell = ws_summary.cell(row=excel_row, column=period_col_idx)
+
+                spent_val = spent_cell.value
+                period_val = period_cell.value
+
+                if isinstance(spent_val, (int, float)) and isinstance(period_val, (int, float)):
+                    if spent_val > period_val:
+                        # переработка: зелёным
+                        spent_cell.fill = green_fill
+                    elif spent_val < 0.8 * period_val:
+                        # менее 80%: #F08080
+                        spent_cell.fill = low_fill
 
     print(f"Готово, Excel сохранён как: {filename}")
