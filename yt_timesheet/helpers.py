@@ -50,6 +50,8 @@ def get_group_users_by_name(group_name: str):
     """
     Получаем логины пользователей по имени группы в Hub.
     Если несколько групп — берём точное совпадение по имени, иначе первую.
+    Hub возвращает объект вида:
+      { "usergroups": [ {..}, {..} ], "top": 100, "skip": 0 }
     """
     hub_base = BASE_URL.rstrip("/") + "/hub"
     url = f"{hub_base}/api/rest/usergroups"
@@ -59,15 +61,26 @@ def get_group_users_by_name(group_name: str):
     }
     resp = requests.get(url, headers=HEADERS_YT, params=params)
     resp.raise_for_status()
-    groups = resp.json()
+
+    data = resp.json()
+
+    # Hub обычно возвращает объект с ключом "usergroups"
+    if isinstance(data, dict) and "usergroups" in data:
+        groups = data.get("usergroups", [])
+    elif isinstance(data, list):
+        # На случай старого/нестандартного формата
+        groups = data
+    else:
+        groups = []
 
     if not groups:
-        raise RuntimeError(f"Группа '{group_name}' не найдена в Hub")
+        raise RuntimeError(f"Группа '{group_name}' не найдена в Hub или нет прав на чтение групп.")
 
+    # Ищем точное совпадение по имени, иначе берём первую
     group = next((g for g in groups if g.get("name") == group_name), groups[0])
 
-    users = group.get("users", [])
-    logins = [u["login"] for u in users if "login" in u]
+    users = group.get("users", []) or []
+    logins = [u["login"] for u in users if isinstance(u, dict) and u.get("login")]
     print(f"Группа по имени '{group.get('name')}', пользователей: {len(logins)}")
     return logins
 
