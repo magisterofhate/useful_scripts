@@ -110,10 +110,52 @@
             const loader = document.getElementById("loader-overlay");
             const submitBtn = document.getElementById("submit-btn");
 
-            form.addEventListener("submit", () => {
-                // показываем прелоадер и блокируем кнопку
+            form.addEventListener("submit", async (e) => {
+                e.preventDefault();
                 loader.style.display = "flex";
                 submitBtn.disabled = true;
+
+                // собираем параметры
+                const formData = new FormData(form);
+
+                try {
+                    const response = await fetch("/", {
+                        method: "POST",
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        alert("Ошибка при генерации отчёта.");
+                        return;
+                    }
+
+                    // получаем blob (сам Excel)
+                    const blob = await response.blob();
+
+                    // создаём ссылку на загрузку
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+
+                    // достаём имя файла с сервера
+                    const header = response.headers.get("Content-Disposition");
+                    let filename = "report.xlsx";
+                    if (header && header.includes("filename=")) {
+                        filename = header.split("filename=")[1].replace(/"/g, "");
+                    }
+
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+
+                } catch (err) {
+                    alert("Ошибка: " + err);
+                } finally {
+                    loader.style.display = "none";
+                    submitBtn.disabled = false;
+                }
             });
         });
     </script>
@@ -132,7 +174,7 @@
         {% endwith %}
     </div>
 
-    <form method="post" id="report-form">
+    <form id="report-form">
         <label for="period">Период</label>
         <select name="period" id="period" onchange="toggleCustomDates()" required>
             <option value="last_week">За прошлую неделю</option>
