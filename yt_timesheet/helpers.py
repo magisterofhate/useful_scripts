@@ -513,3 +513,4 @@ def write_excel_with_formatting(timesheet_df, details_df, start_date: date, end_
                         spent_cell.fill = low_fill
 
     print(f"Готово, Excel сохранён как: {filename}")
+    return filename
