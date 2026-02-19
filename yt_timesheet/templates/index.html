@@ -138,10 +138,16 @@
                     a.href = url;
 
                     // достаём имя файла с сервера
-                    const header = response.headers.get("Content-Disposition");
-                    let filename = "report.xlsx";
-                    if (header && header.includes("filename=")) {
-                        filename = header.split("filename=")[1].replace(/"/g, "");
+                    const cd = response.headers.get("Content-Disposition") || "";
+
+                    // поддержка filename*=UTF-8''... и обычного filename="..."
+                    let filename = "";
+                    let m = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+                    if (m && m[1]) {
+                      filename = decodeURIComponent(m[1]);
+                    } else {
+                      m = cd.match(/filename\s*=\s*("?)([^";]+)\1/i);
+                      if (m && m[2]) filename = m[2];
                     }
 
                     a.download = filename;
