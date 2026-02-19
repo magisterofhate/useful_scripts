@@ -119,7 +119,7 @@
                 const formData = new FormData(form);
 
                 try {
-                    const response = await fetch("/timesheet", {
+                    const response = await fetch("/timesheet/", {
                         method: "POST",
                         body: formData
                     });
@@ -180,7 +180,7 @@
         {% endwith %}
     </div>
 
-    <form id="report-form">
+    <form id="report-form" action="/timesheet/" method="post">
         <label for="period">Период</label>
         <select name="period" id="period" onchange="toggleCustomDates()" required>
             <option value="last_week">За прошлую неделю</option>
