@@ -67,7 +67,7 @@ def compute_period(period, start_str=None, end_str=None):
     raise ValueError(f"Неизвестный период: {period}")
 
 
-@app.route("/timesheet", methods=["GET", "POST"], strict_slashes=False)
+@app.route("/", methods=["GET", "POST"], strict_slashes=False)
 def index():
     if request.method == "POST":
         period = request.form.get("period")
