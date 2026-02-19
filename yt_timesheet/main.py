@@ -178,6 +178,5 @@ def main():
     write_excel_with_formatting(timesheet_df, details_df, start_date, end_date)
 
 
-
 if __name__ == "__main__":
     main()
