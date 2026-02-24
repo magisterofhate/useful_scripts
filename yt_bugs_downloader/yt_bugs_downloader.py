@@ -28,7 +28,7 @@ FIELD_RELEASE = "Релиз"
 PS_VERSION_FIELD = "Версия"  # если у вас называется иначе — поправь
 
 # Диапазон (опционально) — можно оставить None
-CREATED_FROM = None  # "2024-01-01"
+CREATED_FROM = "2023-01-01"  # "2024-01-01"
 CREATED_TO = None  # "2025-12-31"
 
 RESOLVED_CUTOFF = "2024-07-01"  # всё что resolved раньше — исключаем
@@ -162,10 +162,14 @@ def fetch_issues(query: str, fields: str) -> List[Dict[str, Any]]:
 def main():
     # --- Query for VM defects
     q_parts = [f"project: {VM_PROJECT}", f"Type: {VM_DEFECT_TYPE}"]
-    if CREATED_FROM:
-        q_parts.append(f"Created: {CREATED_FROM}..")
-    if CREATED_TO:
-        q_parts.append(f"Created: ..{CREATED_TO}")
+    if CREATED_FROM and not CREATED_TO:
+        q_parts.append(f"Создана: {CREATED_FROM} .. *")
+
+    elif CREATED_FROM and CREATED_TO:
+        q_parts.append(f"Создана: {CREATED_FROM} .. {CREATED_TO}")
+
+    elif CREATED_TO and not CREATED_FROM:
+        q_parts.append(f"Создана: .. {CREATED_TO}")
     query = " ".join(q_parts)
 
     # --- Fields to fetch:
