@@ -272,6 +272,7 @@ def main():
     filtered_out = 0
     kept_total = 0
     kept_unresolved = 0
+    kept_with_ps_links = 0
 
     rows = []
 
@@ -316,6 +317,9 @@ def main():
                     ps_versions.append(version)
 
                 ps_ids.append(linked_id)
+
+                if len(ps_ids) > 0:
+                    kept_with_ps_links += 1
 
                 # “Relates to(OUTWARD): PS-123 [v1.2]”
                 extra = f" [{version}]" if version else ""
@@ -386,6 +390,7 @@ def main():
     print(f"Отфильтровано (resolved < {RESOLVED_CUTOFF}): {filtered_out}")
     print(f"Итого в файле:                {kept_total}")
     print(f"Из них unresolved:            {kept_unresolved}")
+    print(f"Issue с PS links (>=1):       {kept_with_ps_links}")
     print(f"Есть PS links, но нет версии: {coral_count}")
     print("===================")
 
