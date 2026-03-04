@@ -386,7 +386,7 @@ def main():
     print(f"Отфильтровано (resolved < {RESOLVED_CUTOFF}): {filtered_out}")
     print(f"Итого в файле:                {kept_total}")
     print(f"Из них unresolved:            {kept_unresolved}")
-    print(f"Есть PS links, но нет версии): {coral_count}")
+    print(f"Есть PS links, но нет версии: {coral_count}")
     print("===================")
 
 
