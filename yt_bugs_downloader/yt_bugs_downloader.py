@@ -1,6 +1,8 @@
 import requests
 import os
 import re
+import argparse
+import sys
 import pandas as pd
 from datetime import datetime, timezone, date
 from typing import Any, Dict, List, Optional
@@ -16,8 +18,8 @@ TOKEN = "perm-YS5taWxpbmV2c2tpaQ==.NTgtOTU=.vkjYV9lHy4hFn2HrNvXfzAtSSNUbSM"  # �
 PAGE_SIZE = 200       # сколько задач за страницу (max обычно 100–200)
 MAX_PAGES = 1      # например 5; если None — выгружать всё
 
-VM_PROJECT = "VM"
-VM_DEFECT_TYPE = "Ошибка"  # или "Bug" / как у вас в Type
+# project = "VM"
+DEFECT_TYPE = "Ошибка"  # или "Bug" / как у вас в Type
 PS_PROJECT = "PS"
 
 # Названия полей в YouTrack (как в интерфейсе)
@@ -188,12 +190,32 @@ def fetch_issues(query: str, fields: str) -> List[Dict[str, Any]]:
     return results
 
 
+ALLOWED_PROJECTS = {"VM", "BA", "DCI6"}
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--project",
+        required=False,
+        help="Project short name (VM, BA, DCI6)"
+    )
+    args = parser.parse_args()
+
+    if not args.project or args.project not in ALLOWED_PROJECTS:
+        print("Неверно указан проект!")
+        sys.exit(1)
+
+    return args
+
+
 # =======================
 # Main
 # =======================
 def main():
-    # --- Query for VM defects
-    q_parts = [f"project: {VM_PROJECT}", f"Type: {VM_DEFECT_TYPE}"]
+    args = parse_args()
+    project = args.project
+    # --- Query for defects
+    q_parts = [f"project: {project}", f"Type: {DEFECT_TYPE}"]
     if CREATED_FROM and not CREATED_TO:
         q_parts.append(f"Создана: {CREATED_FROM} .. *")
 
