@@ -10,6 +10,10 @@ import numpy as np
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 
+from get_versions import collect_versions
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.worksheet import Worksheet
+
 # =======================
 # CONFIG
 # =======================
@@ -232,6 +236,29 @@ def parse_args():
     return args
 
 
+def write_versions_sheet(wb, versions: List[tuple], sheet_name: str = "Versions") -> None:
+    # Удаляем старый лист, если был
+    if sheet_name in wb.sheetnames:
+        ws_old = wb[sheet_name]
+        wb.remove(ws_old)
+
+    ws: Worksheet = wb.create_sheet(title=sheet_name)
+
+    # Header
+    ws["A1"] = "Version"
+    ws["B1"] = "Release date"
+
+    # Rows
+    for i, (ver, rel_date) in enumerate(versions, start=2):
+        ws.cell(row=i, column=1, value=ver)
+        ws.cell(row=i, column=2, value=rel_date)
+
+    # Чуть-чуть косметики
+    ws.freeze_panes = "A2"
+    ws.column_dimensions["A"].width = 18
+    ws.column_dimensions["B"].width = 14
+
+
 # =======================
 # Main
 # =======================
@@ -318,11 +345,11 @@ def main():
 
                 ps_ids.append(linked_id)
 
-                if len(ps_ids) > 0:
-                    kept_with_ps_links += 1
-
                 # “Relates to(OUTWARD): PS-123 [v1.2]”
                 extra = f" [{version}]" if version else ""
+
+        if len(ps_ids) > 0:
+            kept_with_ps_links += 1
 
         rows.append({
             "id": vm_id,
@@ -351,6 +378,8 @@ def main():
 
     # --- Highlight PS_Версия when PS links exist but PS_Версия is empty
     wb = load_workbook(final_path)
+    versions = collect_versions()
+    write_versions_sheet(wb, versions, sheet_name="Versions")
     ws = wb.active  # ваш лист, если он один
 
     # Находим индексы колонок по заголовкам
