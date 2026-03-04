@@ -7,6 +7,8 @@ import pandas as pd
 from datetime import datetime, timezone, date
 from typing import Any, Dict, List, Optional
 import numpy as np
+from openpyxl import load_workbook
+from openpyxl.styles import PatternFill
 
 # =======================
 # CONFIG
@@ -16,7 +18,7 @@ TOKEN = "perm-YS5taWxpbmV2c2tpaQ==.NTgtOTU=.vkjYV9lHy4hFn2HrNvXfzAtSSNUbSM"  # �
 
 # Пагинация
 PAGE_SIZE = 200       # сколько задач за страницу (max обычно 100–200)
-MAX_PAGES = None      # например 5; если None — выгружать всё
+MAX_PAGES = 2      # например 5; если None — выгружать всё
 
 # project = "VM"
 DEFECT_TYPE = "Ошибка"  # или "Bug" / как у вас в Type
@@ -83,6 +85,22 @@ def calc_quarter_month(created_str: str):
     quarter = f"Q{q} {dt.year}"
     month = dt.strftime("%b %Y")  # Jan/Feb/Mar... in English locale
     return quarter, month
+
+def normalize_ps_version(v: str) -> str:
+    """
+    Trim by first comma OR first whitespace.
+    Examples:
+      '7.2.1, 7.2.2' -> '7.2.1'
+      '7.2.1 build42' -> '7.2.1'
+    """
+    if not v:
+        return ""
+    v = v.strip()
+    # cut at first comma
+    v = v.split(",", 1)[0].strip()
+    # cut at first whitespace
+    v = re.split(r"\s+", v, 1)[0].strip()
+    return v
 
 
 def parse_iso_date(s: str) -> date:
@@ -291,11 +309,13 @@ def main():
                     continue
 
                 linked_id = linked.get("idReadable", "")
-                version = get_custom_field(linked, PS_VERSION_FIELD)
+                version_raw = get_custom_field(linked, PS_VERSION_FIELD)
+                version = normalize_ps_version(version_raw)
 
-                ps_ids.append(linked_id)
                 if version:
                     ps_versions.append(version)
+
+                ps_ids.append(linked_id)
 
                 # “Relates to(OUTWARD): PS-123 [v1.2]”
                 extra = f" [{version}]" if version else ""
@@ -325,11 +345,48 @@ def main():
     df.to_excel(final_path, index=False)
     print(f"Saved: {final_path}")
 
+    # --- Highlight PS_Версия when PS links exist but PS_Версия is empty
+    wb = load_workbook(final_path)
+    ws = wb.active  # ваш лист, если он один
+
+    # Находим индексы колонок по заголовкам
+    header = {ws.cell(row=1, column=c).value: c for c in range(1, ws.max_column + 1)}
+    ps_links_col = None
+    ps_ver_col = None
+
+    # "PS links (IDs)" — как у тебя сейчас называется колонка
+    for k in header.keys():
+        if isinstance(k, str) and k.strip() == "PS links (IDs)":
+            ps_links_col = header[k]
+        if isinstance(k, str) and k.strip() == f"PS_{PS_VERSION_FIELD}":
+            ps_ver_col = header[k]
+
+    if ps_links_col is None or ps_ver_col is None:
+        raise RuntimeError("Не найдены колонки 'PS links (IDs)' и/или 'PS_Версия' в итоговом файле.")
+
+    coral_fill = PatternFill(fill_type="solid", start_color="FF7F50", end_color="FF7F50")  # Coral
+    coral_count = 0
+
+    for r in range(2, ws.max_row + 1):
+        ps_links_val = ws.cell(row=r, column=ps_links_col).value
+        ps_ver_cell = ws.cell(row=r, column=ps_ver_col)
+        ps_ver_val = ps_ver_cell.value
+
+        has_links = bool(str(ps_links_val).strip()) if ps_links_val is not None else False
+        has_version = bool(str(ps_ver_val).strip()) if ps_ver_val is not None else False
+
+        if has_links and not has_version:
+            ps_ver_cell.fill = coral_fill
+            coral_count += 1
+
+    wb.save(final_path)
+
     print("\n===== SUMMARY =====")
     print(f"Всего получено из API:        {total_fetched}")
     print(f"Отфильтровано (resolved < {RESOLVED_CUTOFF}): {filtered_out}")
     print(f"Итого в файле:                {kept_total}")
     print(f"Из них unresolved:            {kept_unresolved}")
+    print(f"Есть PS links, но нет версии): {coral_count}")
     print("===================")
 
 
