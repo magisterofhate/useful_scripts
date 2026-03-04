@@ -22,8 +22,8 @@ def parse_args(allowed_projects: set[str]):
 
 
 def build_query(project: str, defect_type: str, created_from: str | None) -> str:
-    # ваш локализованный формат:
-    # Создана: 2023-01-01 .. *
+    # Ваш локализованный формат:
+    # Создана после 2023-01-01
     q = [f"project: {project}", f"Type: {defect_type}"]
     if created_from:
         q.append(f"Создана: {created_from} .. *")
@@ -60,7 +60,9 @@ def main():
     )
 
     versions = collect_versions()  # если нужно — можно сделать optional флагом
-    final_path, coral_count = export_excel(
+
+
+    final_path, coral_count, fix_filled = export_excel(
         df,
         out_path,
         versions=versions,
@@ -76,6 +78,7 @@ def main():
     print(f"Из них unresolved:                     {stats.kept_unresolved}")
     print(f"Issue с PS links (>=1):                {stats.kept_with_ps_links}")
     print(f"Есть PS links, но нет версии:          {coral_count}")
+    print(f"Автозаполнено Fix version:             {fix_filled}")
     print("===================")
 
 
