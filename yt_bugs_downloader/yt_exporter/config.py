@@ -79,6 +79,6 @@ def load_settings() -> Settings:
         field_priority=os.getenv("FIELD_PRIORITY", "Приоритет"),
         field_release=os.getenv("FIELD_RELEASE", "Релиз"),
         ps_project=os.getenv("PS_PROJECT", "PS"),
-        ps_version_field=os.getenv("PS_VERSION_FIELD", "PS_Версия"),
+        ps_version_field=os.getenv("PS_VERSION_FIELD", "Версия"),
         issue_type_defect=os.getenv("ISSUE_TYPE_DEFECT", "Ошибка"),
     )
