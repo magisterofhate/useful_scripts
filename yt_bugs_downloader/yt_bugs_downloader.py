@@ -4,6 +4,7 @@ import re
 import pandas as pd
 from datetime import datetime, timezone, date
 from typing import Any, Dict, List, Optional
+import numpy as np
 
 # =======================
 # CONFIG
@@ -49,6 +50,20 @@ def yt_dt(ms: Optional[int]) -> Optional[str]:
     if ms is None:
         return None
     return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).date().isoformat()
+
+
+def calc_lifetime(created_str, resolved_str):
+    """
+    Calculate working days between Created and Resolved.
+    If resolved is empty -> return empty string.
+    """
+    if not created_str or not resolved_str:
+        return ""
+
+    created = np.datetime64(created_str)
+    resolved = np.datetime64(resolved_str)
+
+    return int(np.busday_count(created, resolved))
 
 
 def parse_iso_date(s: str) -> date:
@@ -201,6 +216,7 @@ def main():
 
         created = yt_dt(it.get("created"))
         resolved_str = yt_dt(it.get("resolved"))
+        lifetime = calc_lifetime(created, resolved_str)
         resolved_dt = parse_iso_date(resolved_str) if resolved_str else None
 
         # фильтрация
@@ -221,9 +237,6 @@ def main():
         ps_versions: List[str] = []
 
         for link in it.get("links", []) or []:
-            link_type = (link.get("linkType") or {}).get("localizedName") or (link.get("linkType") or {}).get(
-                "name") or ""
-            direction = link.get("direction") or ""
             for linked in link.get("issues", []) or []:
                 prj = (linked.get("project") or {}).get("shortName")
                 if prj != PS_PROJECT:
@@ -241,14 +254,15 @@ def main():
 
         rows.append({
             "id": vm_id,
-            "summary": summary,
-            "Статус": status,
-            "Приоритет": priority,
+            "Summary": summary,
+            "Status": status,
+            "Priority": priority,
             "Created": created,
             "Resolved": resolved_str,
-            "Релиз": release,
+            "Lifetime": lifetime,
+            "Release": release,
             "PS links (IDs)": ", ".join(ps_ids),
-            f"{PS_VERSION_FIELD}": ", ".join(ps_versions)
+            f"PS_{PS_VERSION_FIELD}": ", ".join(ps_versions)
         })
 
     df = pd.DataFrame(rows)
