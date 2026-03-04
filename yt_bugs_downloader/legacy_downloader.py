@@ -1,4 +1,3 @@
-import requests
 import os
 import re
 import argparse
@@ -10,47 +9,18 @@ import numpy as np
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 
-from get_versions import collect_versions
-from openpyxl.utils import get_column_letter
+from legacy_get_versions import collect_versions
 from openpyxl.worksheet.worksheet import Worksheet
 
-# =======================
-# CONFIG
-# =======================
-BASE_URL = "https://youtrack.ispsystem.net/"  # без /api
-TOKEN = "perm-YS5taWxpbmV2c2tpaQ==.NTgtOTU=.vkjYV9lHy4hFn2HrNvXfzAtSSNUbSM"  # персональный токен
+from yt_bugs_downloader.yt_exporter.api.youtrack import fetch_issues
 
-# Пагинация
-PAGE_SIZE = 200       # сколько задач за страницу (max обычно 100–200)
-MAX_PAGES = 2      # например 5; если None — выгружать всё
-
-# project = "VM"
-DEFECT_TYPE = "Ошибка"  # или "Bug" / как у вас в Type
-PS_PROJECT = "PS"
-
-# Названия полей в YouTrack (как в интерфейсе)
-FIELD_STATUS = "State"  # обычно State/Статус
-FIELD_PRIORITY = "Priority"
-FIELD_RELEASE = "Релиз"
-
-# Поле версии в проекте PS (как в интерфейсе)
-PS_VERSION_FIELD = "Версия"  # если у вас называется иначе — поправь
-
-# Диапазон (опционально) — можно оставить None
-CREATED_FROM = "2023-01-01"  # "2024-01-01"
-CREATED_TO = None  # "2025-12-31"
-
-RESOLVED_CUTOFF = "2024-07-01"  # всё что resolved раньше — исключаем
 
 # OUT_XLSX = "vm_defects_with_ps_links.xlsx"
 
 # =======================
 # Helpers
 # =======================
-HEADERS = {
-    "Authorization": f"Bearer {TOKEN}",
-    "Accept": "application/json",
-}
+
 
 
 def yt_dt(ms: Optional[int]) -> Optional[str]:
@@ -165,60 +135,6 @@ def get_unique_filename(path: str) -> str:
             return new_path
         counter += 1
 
-
-def fetch_issues(query: str, fields: str) -> List[Dict[str, Any]]:
-    url = f"{BASE_URL.rstrip('/')}/api/issues"
-    results: List[Dict[str, Any]] = []
-    skip = 0
-    page = 0
-
-    while True:
-        if MAX_PAGES is not None and page >= MAX_PAGES:
-            print(f"Остановлено по лимиту страниц: {MAX_PAGES}")
-            break
-
-        print(f"Загрузка страницы {page + 1} (skip={skip}, top={PAGE_SIZE})")
-
-        params = {
-            "query": query,
-            "fields": fields,
-            "$top": PAGE_SIZE,
-            "$skip": skip,
-        }
-
-        r = requests.get(url, headers=HEADERS, params=params, timeout=60)
-
-        if r.status_code >= 400:
-            print("HTTP", r.status_code)
-            print(r.text)
-
-        r.raise_for_status()
-
-        batch = r.json()
-        if not batch:
-            print("Больше данных нет.")
-            break
-
-        results.extend(batch)
-
-        if len(batch) < PAGE_SIZE:
-            print("Последняя страница достигнута.")
-            break
-
-        skip += PAGE_SIZE
-        page += 1
-
-    print(f"Всего выгружено задач: {len(results)}")
-    return results
-
-
-ALLOWED_PROJECTS = {"VM", "BA", "DCI6"}
-
-PROJECT_FILE_PREFIX = {
-    "VM": "vm",
-    "BA": "bill",
-    "DCI6": "dci"
-}
 
 def parse_args():
     parser = argparse.ArgumentParser()
