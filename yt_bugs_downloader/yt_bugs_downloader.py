@@ -219,7 +219,6 @@ def main():
         # Collect PS-linked issues + their version field
         ps_ids: List[str] = []
         ps_versions: List[str] = []
-        ps_links_detailed: List[str] = []
 
         for link in it.get("links", []) or []:
             link_type = (link.get("linkType") or {}).get("localizedName") or (link.get("linkType") or {}).get(
@@ -239,7 +238,6 @@ def main():
 
                 # “Relates to(OUTWARD): PS-123 [v1.2]”
                 extra = f" [{version}]" if version else ""
-                ps_links_detailed.append(f"{link_type}({direction}): {linked_id}{extra}")
 
         rows.append({
             "id": vm_id,
@@ -250,9 +248,7 @@ def main():
             "Resolved": resolved_str,
             "Релиз": release,
             "PS links (IDs)": ", ".join(ps_ids),
-            f"{PS_VERSION_FIELD}": ", ".join(ps_versions),
-            "PS links (detailed)": " | ".join(ps_links_detailed),
-            "PS link count": len(ps_ids),
+            f"{PS_VERSION_FIELD}": ", ".join(ps_versions)
         })
 
     df = pd.DataFrame(rows)
