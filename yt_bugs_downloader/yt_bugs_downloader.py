@@ -255,7 +255,7 @@ def main():
 
     # Nice ordering: most linked first
     if not df.empty:
-        df = df.sort_values(["PS link count", "id"], ascending=[False, True])
+        df = df.sort_values(["id"], ascending=[True])
 
     final_path = get_unique_filename(OUT_XLSX)
     df.to_excel(final_path, index=False)
