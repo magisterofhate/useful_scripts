@@ -71,7 +71,7 @@ def highlight_missing_ps_version(
     ps_links_col = header.get(ps_links_col_name)
     ps_ver_col = header.get(ps_version_col_name)
     if ps_links_col is None or ps_ver_col is None:
-        raise RuntimeError(f"Не найдены колонки '{ps_links_col_name}' и/или '{ps_version_col_name}'")
+        raise RuntimeError(f"Не найдены колонки '{ps_links_col_name}' и/или 'PS_{ps_version_col_name}'")
 
     coral_fill = PatternFill(fill_type="solid", start_color="FF7F50", end_color="FF7F50")
     coral_count = 0

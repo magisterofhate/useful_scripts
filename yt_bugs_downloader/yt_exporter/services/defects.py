@@ -142,6 +142,13 @@ def build_defects_dataframe(
         ps_ids = list(dict.fromkeys(ps_ids))
         ps_versions = list(dict.fromkeys(ps_versions))
 
+        ps_links_str = ", ".join(ps_ids)
+        ps_version_str = ", ".join(ps_versions)
+
+        # NEW: affected/fix
+        affected_version = ps_versions[0] if ps_ids and ps_versions else ""
+        fix_version = release if release else ""
+
         if ps_ids:
             stats.kept_with_ps_links += 1
 
@@ -155,9 +162,11 @@ def build_defects_dataframe(
             "Month": month,
             "Resolved": resolved_str or "",
             "Lifetime": lifetime,
-            "Релиз": release,
+            "Release": release,
+            "Affected version": affected_version,
+            "Fix version": fix_version,
             "PS links (IDs)": ", ".join(ps_ids),
-            ps_version_field: ", ".join(ps_versions),
+            f"PS_{ps_version_field}": ", ".join(ps_versions),
         })
 
     df = pd.DataFrame(rows)

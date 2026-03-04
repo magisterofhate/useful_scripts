@@ -64,7 +64,8 @@ def main():
         df,
         out_path,
         versions=versions,
-        ps_version_col_name=s.ps_version_field,
+        ps_links_col_name="PS links (IDs)",
+        ps_version_col_name="PS_Версия",
     )
 
     print(f"Saved: {final_path}")
