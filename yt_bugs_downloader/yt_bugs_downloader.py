@@ -66,6 +66,23 @@ def calc_lifetime(created_str, resolved_str):
     return int(np.busday_count(created, resolved))
 
 
+def calc_quarter_month(created_str: str):
+    """
+    From Created (YYYY-MM-DD) returns:
+      Quarter: 'Qx YYYY'
+      Month:   'Mon YYYY' (e.g., 'Sep 2024')
+    If created_str is empty -> ('', '')
+    """
+    if not created_str:
+        return "", ""
+
+    dt = datetime.strptime(created_str, "%Y-%m-%d").date()
+    q = (dt.month - 1) // 3 + 1
+    quarter = f"Q{q} {dt.year}"
+    month = dt.strftime("%b %Y")  # Jan/Feb/Mar... in English locale
+    return quarter, month
+
+
 def parse_iso_date(s: str) -> date:
     return datetime.strptime(s, "%Y-%m-%d").date()
 
@@ -217,6 +234,7 @@ def main():
         created = yt_dt(it.get("created"))
         resolved_str = yt_dt(it.get("resolved"))
         lifetime = calc_lifetime(created, resolved_str)
+        quarter, month = calc_quarter_month(created)
         resolved_dt = parse_iso_date(resolved_str) if resolved_str else None
 
         # фильтрация
@@ -258,6 +276,8 @@ def main():
             "Status": status,
             "Priority": priority,
             "Created": created,
+            "Quarter": quarter,
+            "Month": month,
             "Resolved": resolved_str,
             "Lifetime": lifetime,
             "Release": release,
