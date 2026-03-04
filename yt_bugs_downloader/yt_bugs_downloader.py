@@ -36,7 +36,7 @@ CREATED_TO = None  # "2025-12-31"
 
 RESOLVED_CUTOFF = "2024-07-01"  # всё что resolved раньше — исключаем
 
-OUT_XLSX = "vm_defects_with_ps_links.xlsx"
+# OUT_XLSX = "vm_defects_with_ps_links.xlsx"
 
 # =======================
 # Helpers
@@ -192,6 +192,12 @@ def fetch_issues(query: str, fields: str) -> List[Dict[str, Any]]:
 
 ALLOWED_PROJECTS = {"VM", "BA", "DCI6"}
 
+PROJECT_FILE_PREFIX = {
+    "VM": "vm",
+    "BA": "bill",
+    "DCI6": "dci"
+}
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -214,6 +220,8 @@ def parse_args():
 def main():
     args = parse_args()
     project = args.project
+    prefix = PROJECT_FILE_PREFIX[project]
+    OUT_XLSX = f"{prefix}_defects_with_ps_links.xlsx"
     # --- Query for defects
     q_parts = [f"project: {project}", f"Type: {DEFECT_TYPE}"]
     if CREATED_FROM and not CREATED_TO:
