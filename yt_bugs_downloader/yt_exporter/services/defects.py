@@ -155,8 +155,8 @@ def build_defects_dataframe(
         rows.append({
             "id": issue_id,
             "summary": summary,
-            "Статус": status,
-            "Приоритет": priority,
+            "Status": status,
+            "Priority": priority,
             "Created": created or "",
             "Quarter": quarter,
             "Month": month,
