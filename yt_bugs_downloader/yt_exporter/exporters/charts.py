@@ -1,28 +1,27 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Tuple
 
 import pandas as pd
 import matplotlib.pyplot as plt
 
 
-def build_open_defects_by_week(
+def build_defects_dashboard_by_week(
     df: pd.DataFrame,
     output_path: str,
     *,
     created_col: str = "Created",
     resolved_col: str = "Resolved",
-    title: str = "Open defects by week",
+    title_prefix: str = "",
 ) -> str:
     """
-    Builds weekly open defects trend and saves it as PNG.
+    Builds one PNG dashboard with 4 weekly charts:
+      1. Open defects by week
+      2. Created defects by week
+      3. Resolved defects by week
+      4. Net backlog delta by week
 
-    A defect is considered open on week_end if:
-      Created <= week_end
-      and (Resolved is empty or Resolved > week_end)
-
-    Returns path to saved chart.
+    Returns saved file path.
     """
     if created_col not in df.columns:
         raise RuntimeError(f"Не найдена колонка '{created_col}'")
@@ -37,46 +36,99 @@ def build_open_defects_by_week(
     work_df = work_df[work_df[created_col].notna()].copy()
 
     if work_df.empty:
-        raise RuntimeError("Нет данных с заполненной датой Created для построения графика")
+        raise RuntimeError("Нет данных с заполненной датой Created для построения графиков")
 
     start_date = work_df[created_col].min().normalize()
-    end_candidates = [work_df[resolved_col].max()]
-    end_candidates = [d for d in end_candidates if pd.notna(d)]
 
-    if end_candidates:
-        end_date = max(pd.Timestamp.today().normalize(), max(end_candidates).normalize())
-    else:
-        end_date = pd.Timestamp.today().normalize()
+    end_candidates = [pd.Timestamp.today().normalize()]
+    if work_df[resolved_col].notna().any():
+        end_candidates.append(work_df[resolved_col].max().normalize())
 
-    # Недели по воскресеньям; можно поменять на W-MON, если захочешь
+    end_date = max(end_candidates)
+
+    # Недели по воскресеньям
     week_ends = pd.date_range(start=start_date, end=end_date, freq="W")
 
     open_counts = []
+    created_counts = []
+    resolved_counts = []
+
     for week_end in week_ends:
-        mask = (
+        week_start = week_end - pd.Timedelta(days=6)
+
+        open_mask = (
             (work_df[created_col] <= week_end) &
             (
                 work_df[resolved_col].isna() |
                 (work_df[resolved_col] > week_end)
             )
         )
-        open_counts.append(int(mask.sum()))
+
+        created_mask = (
+            (work_df[created_col] >= week_start) &
+            (work_df[created_col] <= week_end)
+        )
+
+        resolved_mask = (
+            work_df[resolved_col].notna() &
+            (work_df[resolved_col] >= week_start) &
+            (work_df[resolved_col] <= week_end)
+        )
+
+        open_counts.append(int(open_mask.sum()))
+        created_counts.append(int(created_mask.sum()))
+        resolved_counts.append(int(resolved_mask.sum()))
+
+    delta_counts = [c - r for c, r in zip(created_counts, resolved_counts)]
 
     chart_df = pd.DataFrame({
         "WeekEnd": week_ends,
         "OpenDefects": open_counts,
+        "CreatedDefects": created_counts,
+        "ResolvedDefects": resolved_counts,
+        "BacklogDelta": delta_counts,
     })
 
-    plt.figure(figsize=(14, 6))
-    plt.plot(chart_df["WeekEnd"], chart_df["OpenDefects"], linewidth=2)
-    plt.title(title)
-    plt.xlabel("Week")
-    plt.ylabel("Open defects")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
+    fig, axes = plt.subplots(2, 2, figsize=(16, 10))
+
+    fig.suptitle(
+        f"{title_prefix} Weekly defects dashboard".strip(),
+        fontsize=14
+    )
+
+    # 1. Open defects
+    axes[0, 0].plot(chart_df["WeekEnd"], chart_df["OpenDefects"], linewidth=2)
+    axes[0, 0].set_title("Open defects by week")
+    axes[0, 0].set_xlabel("Week")
+    axes[0, 0].set_ylabel("Open defects")
+    axes[0, 0].tick_params(axis="x", rotation=45)
+
+    # 2. Created defects
+    axes[0, 1].plot(chart_df["WeekEnd"], chart_df["CreatedDefects"], linewidth=2)
+    axes[0, 1].set_title("Created defects by week")
+    axes[0, 1].set_xlabel("Week")
+    axes[0, 1].set_ylabel("Created")
+    axes[0, 1].tick_params(axis="x", rotation=45)
+
+    # 3. Resolved defects
+    axes[1, 0].plot(chart_df["WeekEnd"], chart_df["ResolvedDefects"], linewidth=2)
+    axes[1, 0].set_title("Resolved defects by week")
+    axes[1, 0].set_xlabel("Week")
+    axes[1, 0].set_ylabel("Resolved")
+    axes[1, 0].tick_params(axis="x", rotation=45)
+
+    # 4. Net backlog delta
+    axes[1, 1].plot(chart_df["WeekEnd"], chart_df["BacklogDelta"], linewidth=2)
+    axes[1, 1].axhline(0, linewidth=1)
+    axes[1, 1].set_title("Net backlog delta by week")
+    axes[1, 1].set_xlabel("Week")
+    axes[1, 1].set_ylabel("Created - Resolved")
+    axes[1, 1].tick_params(axis="x", rotation=45)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     output = Path(output_path)
     plt.savefig(output, dpi=150)
-    plt.close()
+    plt.close(fig)
 
     return str(output)

@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from yt_bugs_downloader.yt_exporter.config import load_settings
 from yt_bugs_downloader.yt_exporter.api.youtrack import YouTrackClient
 from yt_bugs_downloader.yt_exporter.services.defects import build_defects_dataframe
 from yt_bugs_downloader.yt_exporter.services.versions import collect_versions
 from yt_bugs_downloader.yt_exporter.exporters.excel import export_excel
-from yt_bugs_downloader.yt_exporter.exporters.charts import build_open_defects_by_week
+from yt_bugs_downloader.yt_exporter.exporters.charts import build_defects_dashboard_by_week
 
 
 def parse_args(allowed_projects: set[str]):
@@ -71,15 +72,15 @@ def main():
         ps_version_col_name="PS_Версия",
     )
 
-    chart_path = f"{prefix}_open_defects_by_week.png"
+    excel_path_obj = Path(final_path)
+    chart_path = str(excel_path_obj.with_name(f"{excel_path_obj.stem}_dashboard.png"))
 
-    chart_title = f"{project} Open defects by week"
-    build_open_defects_by_week(
+    build_defects_dashboard_by_week(
         df,
         chart_path,
         created_col="Created",
         resolved_col="Resolved",
-        title=chart_title,
+        title_prefix=project,
     )
 
     print(f"Saved: {final_path}")
