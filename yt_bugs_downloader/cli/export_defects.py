@@ -59,7 +59,7 @@ def main():
         ps_version_field=s.ps_version_field,
     )
 
-    versions = collect_versions()  # если нужно — можно сделать optional флагом
+    versions = collect_versions(project)  # если нужно — можно сделать optional флагом
 
 
     final_path, coral_count, fix_filled, affected_filled = export_excel(

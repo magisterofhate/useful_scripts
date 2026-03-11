@@ -7,7 +7,12 @@ from typing import List, Tuple, Optional
 import requests
 from bs4 import BeautifulSoup
 
-BASE_URL = "https://msg6.ispsystem.net/vm"
+PROJECT_VERSIONS_URLS = {
+    "VM": "https://msg6.ispsystem.net/vm",
+    "BA": "https://msg6.ispsystem.net/bill",
+    "DCI6": "https://msg6.ispsystem.net/dci",
+}
+
 START_PAGE = 1
 MAX_PAGES = 100  # предохранитель
 
@@ -24,8 +29,8 @@ RELEASE_DATE_RE = re.compile(
 )
 
 
-def fetch_page(page: int) -> str:
-    url = f"{BASE_URL}?page={page}"
+def fetch_page(base_url: str, page: int) -> str:
+    url = f"{base_url}?page={page}"
     r = requests.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
     r.raise_for_status()
     return r.text
@@ -89,15 +94,20 @@ def print_table(rows: List[Tuple[str, str]]):
         print(f"{v:<15} | {d}")
 
 
-def collect_versions() -> List[Tuple[str, str]]:
+def collect_versions(project: str):
     """
     Возвращает список (version, release_date) по всем страницам до стоп-условия.
     """
+    if project not in PROJECT_VERSIONS_URLS:
+        raise RuntimeError(f"Неизвестный проект для versions: {project}")
+
+    base_url = PROJECT_VERSIONS_URLS[project]
+
     collected: List[Tuple[str, str]] = []
     seen_versions = set()
 
     for page in range(START_PAGE, MAX_PAGES + 1):
-        html = fetch_page(page)
+        html = fetch_page(base_url, page)
         soup = BeautifulSoup(html, "lxml")
 
         version_cells = extract_version_cells(soup)
