@@ -145,7 +145,11 @@ def build_defects_dataframe(
 
         # NEW: affected/fix
         affected_version = ps_versions[0] if ps_ids and ps_versions else ""
-        fix_version = release if release else ""
+        release_normalized = release.strip().lower().replace("ё", "е") if release else ""
+        if release_normalized.startswith("не определ"):
+            fix_version = ""
+        else:
+            fix_version = release if release else ""
 
         if ps_ids:
             stats.kept_with_ps_links += 1

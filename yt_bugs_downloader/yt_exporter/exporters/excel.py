@@ -204,7 +204,7 @@ def fill_fix_version_from_versions(
 
         release_str = _cell_str(ws_def, r, col_release)
 
-        if release_str.lower().startswith("не определ"):
+        if release_str.lower().startswith("не опред"):
             continue
 
         if release_str:
