@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+import pandas as pd
 
 from yt_bugs_downloader.yt_exporter.config import load_settings
 from yt_bugs_downloader.yt_exporter.api.youtrack import YouTrackClient
@@ -10,6 +11,7 @@ from yt_bugs_downloader.yt_exporter.services.defects import build_defects_datafr
 from yt_bugs_downloader.yt_exporter.services.versions import collect_versions
 from yt_bugs_downloader.yt_exporter.exporters.excel import export_excel
 from yt_bugs_downloader.yt_exporter.exporters.charts import build_defects_dashboard_by_week
+from yt_bugs_downloader.yt_exporter.metrics.der import export_der_excel
 
 
 def parse_args(allowed_projects: set[str]):
@@ -83,6 +85,20 @@ def main():
         title_prefix=project,
     )
 
+    excel_path_obj = Path(final_path)
+    der_path = str(excel_path_obj.with_name(f"{excel_path_obj.stem}_der.xlsx"))
+
+    df_for_der = pd.read_excel(final_path, sheet_name="Defects")
+
+    export_der_excel(
+        df_for_der,
+        der_path,
+        affected_version_col="Affected version",
+        quarter_col="C_Qtr",
+        ps_links_col="PS links (IDs)",
+        status_col="Status",
+    )
+
     print(f"Saved: {final_path}")
     print("\n===== SUMMARY =====")
     print(f"Всего получено из API:                 {stats.total_fetched}")
@@ -94,6 +110,7 @@ def main():
     print(f"Автозаполнено Fix version:             {fix_filled}")
     print(f"Автозаполнено Affected version:        {affected_filled}")
     print(f"Chart saved:                           {chart_path}")
+    print(f"DER saved:                             {der_path}")
     print("===================")
 
 
