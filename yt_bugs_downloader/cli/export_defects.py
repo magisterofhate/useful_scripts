@@ -8,6 +8,7 @@ from yt_bugs_downloader.yt_exporter.api.youtrack import YouTrackClient
 from yt_bugs_downloader.yt_exporter.services.defects import build_defects_dataframe
 from yt_bugs_downloader.yt_exporter.services.versions import collect_versions
 from yt_bugs_downloader.yt_exporter.exporters.excel import export_excel
+from yt_bugs_downloader.yt_exporter.exporters.charts import build_open_defects_by_week
 
 
 def parse_args(allowed_projects: set[str]):
@@ -70,6 +71,17 @@ def main():
         ps_version_col_name="PS_Версия",
     )
 
+    chart_path = f"{prefix}_open_defects_by_week.png"
+
+    chart_title = f"{project} Open defects by week"
+    build_open_defects_by_week(
+        df,
+        chart_path,
+        created_col="Created",
+        resolved_col="Resolved",
+        title=chart_title,
+    )
+
     print(f"Saved: {final_path}")
     print("\n===== SUMMARY =====")
     print(f"Всего получено из API:                 {stats.total_fetched}")
@@ -80,6 +92,7 @@ def main():
     print(f"Есть PS links, но нет версии:          {coral_count}")
     print(f"Автозаполнено Fix version:             {fix_filled}")
     print(f"Автозаполнено Affected version:        {affected_filled}")
+    print(f"Chart saved:                           {chart_path}")
     print("===================")
 
 
