@@ -67,10 +67,10 @@ def calc_lifetime(created_str: Optional[str], resolved_str: Optional[str]) -> st
     return str(int(np.busday_count(created, resolved)))
 
 
-def calc_quarter_month(created_str: Optional[str]) -> Tuple[str, str]:
-    if not created_str:
+def calc_quarter_month(date_str: Optional[str]) -> Tuple[str, str]:
+    if not date_str:
         return "", ""
-    dt = datetime.strptime(created_str, "%Y-%m-%d").date()
+    dt = datetime.strptime(date_str, "%Y-%m-%d").date()
     q = (dt.month - 1) // 3 + 1
     quarter = f"Q{q} {dt.year}"
     month = dt.strftime("%b %Y")
@@ -118,7 +118,8 @@ def build_defects_dataframe(
         priority = get_custom_field(it, field_priority)
         release = get_custom_field(it, field_release)
 
-        quarter, month = calc_quarter_month(created)
+        created_qtr, created_mnt = calc_quarter_month(created)
+        resolved_qtr, resolved_mnt = calc_quarter_month(resolved_str)
         lifetime = calc_lifetime(created, resolved_str)
 
         ps_ids: List[str] = []
@@ -142,9 +143,6 @@ def build_defects_dataframe(
         ps_ids = list(dict.fromkeys(ps_ids))
         ps_versions = list(dict.fromkeys(ps_versions))
 
-        ps_links_str = ", ".join(ps_ids)
-        ps_version_str = ", ".join(ps_versions)
-
         # NEW: affected/fix
         affected_version = ps_versions[0] if ps_ids and ps_versions else ""
         fix_version = release if release else ""
@@ -158,9 +156,11 @@ def build_defects_dataframe(
             "Status": status,
             "Priority": priority,
             "Created": created or "",
-            "Quarter": quarter,
-            "Month": month,
+            "C_Qtr": created_qtr,
+            "C_Mnt": created_mnt,
             "Resolved": resolved_str or "",
+            "R_Qtr": resolved_qtr,
+            "R_Mnt": resolved_mnt,
             "Lifetime": lifetime,
             "Release": release,
             "Affected version": affected_version,
