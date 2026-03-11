@@ -75,8 +75,8 @@ def load_settings() -> Settings:
         allowed_projects=allowed_projects,
         file_prefix_by_project=file_prefix_by_project,
 
-        field_status=os.getenv("FIELD_STATUS", "Статус"),
-        field_priority=os.getenv("FIELD_PRIORITY", "Приоритет"),
+        field_status=os.getenv("FIELD_STATUS", "State"),
+        field_priority=os.getenv("FIELD_PRIORITY", "Priority"),
         field_release=os.getenv("FIELD_RELEASE", "Релиз"),
         ps_project=os.getenv("PS_PROJECT", "PS"),
         ps_version_field=os.getenv("PS_VERSION_FIELD", "Версия"),

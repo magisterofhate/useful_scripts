@@ -126,13 +126,21 @@ def fill_fix_version_from_versions(
     defects_sheet_name: str = "Defects",
     versions_sheet_name: str = "Versions",
     resolved_col_name: str = "Resolved",
+    release_col_name: str = "Release",
     fix_version_col_name: str = "Fix version",
     versions_version_col_name: str = "Version",
     versions_date_col_name: str = "Release date",
 ) -> int:
     """
-    Ускоренный алгоритм: O(defects * log(versions))
-    Для каждого дефекта ставим Fix version = первая Version, у которой Release date > Resolved (строго).
+    Логика заполнения Fix version:
+
+    1. Если у дефекта уже заполнен Fix version -> ничего не делаем
+    2. Если у дефекта нет Resolved -> ничего не делаем
+    3. Если у дефекта есть Resolved и заполнен Release ->
+       Fix version = Release
+    4. Иначе ищем первую версию из листа Versions, у которой
+       Release date > Resolved, и ставим её в Fix version
+
     Возвращает количество заполненных ячеек Fix version.
     """
     if defects_sheet_name not in wb.sheetnames:
@@ -143,44 +151,137 @@ def fill_fix_version_from_versions(
     ws_def = wb[defects_sheet_name]
     ws_ver = wb[versions_sheet_name]
 
-    # колонки на Defects
+    # Колонки на листе Defects
     col_resolved = _find_col(ws_def, resolved_col_name)
+    col_release = _find_col(ws_def, release_col_name)
     col_fix = _find_col(ws_def, fix_version_col_name)
 
-    # колонки на Versions
-    col_v = _find_col(ws_ver, versions_version_col_name)
-    col_d = _find_col(ws_ver, versions_date_col_name)
+    # Колонки на листе Versions
+    col_version = _find_col(ws_ver, versions_version_col_name)
+    col_release_date = _find_col(ws_ver, versions_date_col_name)
 
-    # 1) Считываем и сортируем версии по дате
+    # Читаем версии и сортируем по дате релиза
     versions = []
     for r in range(2, ws_ver.max_row + 1):
-        ver = ws_ver.cell(row=r, column=col_v).value
-        dt = _parse_ymd(ws_ver.cell(row=r, column=col_d).value)
-        if ver and dt:
-            versions.append((dt, str(ver).strip()))
+        version_val = ws_ver.cell(row=r, column=col_version).value
+        release_date_val = ws_ver.cell(row=r, column=col_release_date).value
 
-    versions.sort(key=lambda x: x[0])  # по дате ASC
+        release_dt = _parse_ymd(release_date_val)
+        if version_val and release_dt:
+            versions.append((release_dt, str(version_val).strip()))
+
+    versions.sort(key=lambda x: x[0])
+
     if not versions:
         return 0
 
     dates = [d for d, _ in versions]
     names = [n for _, n in versions]
 
-    # 2) Один проход по дефектам
     filled = 0
+
     for r in range(2, ws_def.max_row + 1):
         fix_cell = ws_def.cell(row=r, column=col_fix)
+
+        # Если Fix version уже есть - пропускаем
         if fix_cell.value is not None and str(fix_cell.value).strip():
-            continue  # Fix version уже есть
+            continue
 
-        resolved_dt = _parse_ymd(ws_def.cell(row=r, column=col_resolved).value)
+        # Если нет Resolved - пропускаем
+        resolved_val = ws_def.cell(row=r, column=col_resolved).value
+        resolved_dt = _parse_ymd(resolved_val)
         if resolved_dt is None:
-            continue  # нет Resolved
+            continue
 
-        # Нам нужна первая дата релиза, строго больше resolved_dt
+        # Приоритет 1: если есть Release -> берём его
+        release_val = ws_def.cell(row=r, column=col_release).value
+        release_str = str(release_val).strip() if release_val is not None else ""
+        if release_str:
+            fix_cell.value = release_str
+            filled += 1
+            continue
+
+        # Приоритет 2: ищем первую версию, у которой Release date > Resolved
         idx = bisect_right(dates, resolved_dt)
         if idx < len(dates):
             fix_cell.value = names[idx]
+            filled += 1
+
+    return filled
+
+
+def fill_affected_version_from_versions(
+    wb,
+    *,
+    defects_sheet_name: str = "Defects",
+    versions_sheet_name: str = "Versions",
+    created_col_name: str = "Created",
+    affected_version_col_name: str = "Affected version",
+    versions_version_col_name: str = "Version",
+    versions_date_col_name: str = "Release date",
+) -> int:
+    """
+    Логика заполнения Affected version:
+
+    1. Если Affected version уже заполнен -> ничего не делаем
+    2. Если нет Created -> ничего не делаем
+    3. Иначе ищем первую версию из листа Versions, у которой
+       Release date > Created, и ставим её в Affected version
+
+    Возвращает количество заполненных ячеек Affected version.
+    """
+    if defects_sheet_name not in wb.sheetnames:
+        raise RuntimeError(f"Нет листа '{defects_sheet_name}'")
+    if versions_sheet_name not in wb.sheetnames:
+        raise RuntimeError(f"Нет листа '{versions_sheet_name}'")
+
+    ws_def = wb[defects_sheet_name]
+    ws_ver = wb[versions_sheet_name]
+
+    # Колонки на листе Defects
+    col_created = _find_col(ws_def, created_col_name)
+    col_affected = _find_col(ws_def, affected_version_col_name)
+
+    # Колонки на листе Versions
+    col_version = _find_col(ws_ver, versions_version_col_name)
+    col_release_date = _find_col(ws_ver, versions_date_col_name)
+
+    # Читаем версии и сортируем по дате релиза
+    versions = []
+    for r in range(2, ws_ver.max_row + 1):
+        version_val = ws_ver.cell(row=r, column=col_version).value
+        release_date_val = ws_ver.cell(row=r, column=col_release_date).value
+
+        release_dt = _parse_ymd(release_date_val)
+        if version_val and release_dt:
+            versions.append((release_dt, str(version_val).strip()))
+
+    versions.sort(key=lambda x: x[0])
+
+    if not versions:
+        return 0
+
+    dates = [d for d, _ in versions]
+    names = [n for _, n in versions]
+
+    filled = 0
+
+    for r in range(2, ws_def.max_row + 1):
+        affected_cell = ws_def.cell(row=r, column=col_affected)
+
+        # Если уже заполнено (например, из PS_Версия) — не трогаем
+        if affected_cell.value is not None and str(affected_cell.value).strip():
+            continue
+
+        created_val = ws_def.cell(row=r, column=col_created).value
+        created_dt = _parse_ymd(created_val)
+        if created_dt is None:
+            continue
+
+        # Ищем первую версию, у которой Release date > Created
+        idx = bisect_right(dates, created_dt)
+        if idx < len(dates):
+            affected_cell.value = names[idx]
             filled += 1
 
     return filled
@@ -195,7 +296,7 @@ def export_excel(
     versions_sheet_name: str = "Versions",
     ps_links_col_name: str = "PS links (IDs)",
     ps_version_col_name: str = "PS_Версия",
-) -> tuple[str, int, int]:
+) -> tuple[str, int, int, int]:
     """
     Writes df -> xlsx, adds Versions sheet, highlights missing PS versions.
     Returns (final_path, coral_count).
@@ -209,6 +310,18 @@ def export_excel(
     if versions is not None:
         write_versions_sheet(wb, versions, sheet_name=versions_sheet_name)
 
+    affected_filled = 0
+    if versions is not None:
+        affected_filled = fill_affected_version_from_versions(
+            wb,
+            defects_sheet_name=main_sheet_name,
+            versions_sheet_name=versions_sheet_name,
+            created_col_name="Created",
+            affected_version_col_name="Affected version",
+            versions_version_col_name="Version",
+            versions_date_col_name="Release date",
+        )
+
     # Автозаполнение Fix version
     fix_filled = 0
     if versions is not None:
@@ -217,6 +330,7 @@ def export_excel(
             defects_sheet_name=main_sheet_name,
             versions_sheet_name=versions_sheet_name,
             resolved_col_name="Resolved",
+            release_col_name="Release",
             fix_version_col_name="Fix version",
             versions_version_col_name="Version",
             versions_date_col_name="Release date",
@@ -229,4 +343,4 @@ def export_excel(
     )
 
     wb.save(final_path)
-    return final_path, coral_count, fix_filled
+    return final_path, coral_count, fix_filled, affected_filled

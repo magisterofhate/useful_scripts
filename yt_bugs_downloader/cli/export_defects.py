@@ -62,7 +62,7 @@ def main():
     versions = collect_versions()  # если нужно — можно сделать optional флагом
 
 
-    final_path, coral_count, fix_filled = export_excel(
+    final_path, coral_count, fix_filled, affected_filled = export_excel(
         df,
         out_path,
         versions=versions,
@@ -79,6 +79,7 @@ def main():
     print(f"Issue с PS links (>=1):                {stats.kept_with_ps_links}")
     print(f"Есть PS links, но нет версии:          {coral_count}")
     print(f"Автозаполнено Fix version:             {fix_filled}")
+    print(f"Автозаполнено Affected version:        {affected_filled}")
     print("===================")
 
 
