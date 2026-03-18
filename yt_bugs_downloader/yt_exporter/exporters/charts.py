@@ -5,6 +5,13 @@ from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 
+def _is_hot_priority(value) -> bool:
+    if pd.isna(value):
+        return False
+
+    normalized = str(value).strip().lower()
+    return normalized in {"major", "critical", "неотложный"}
+
 
 def build_defects_dashboard_by_week(
     df: pd.DataFrame,
@@ -12,6 +19,7 @@ def build_defects_dashboard_by_week(
     *,
     created_col: str = "Created",
     resolved_col: str = "Resolved",
+    priority_col: str = "Priority",
     title_prefix: str = "",
 ) -> str:
     """
@@ -27,11 +35,14 @@ def build_defects_dashboard_by_week(
         raise RuntimeError(f"Не найдена колонка '{created_col}'")
     if resolved_col not in df.columns:
         raise RuntimeError(f"Не найдена колонка '{resolved_col}'")
+    if priority_col not in df.columns:
+        raise RuntimeError(f"Не найдена колонка '{priority_col}'")
 
     work_df = df.copy()
 
     work_df[created_col] = pd.to_datetime(work_df[created_col], errors="coerce")
     work_df[resolved_col] = pd.to_datetime(work_df[resolved_col], errors="coerce")
+    work_df["__is_hot_priority__"] = work_df[priority_col].apply(_is_hot_priority)
 
     work_df = work_df[work_df[created_col].notna()].copy()
 
@@ -50,6 +61,7 @@ def build_defects_dashboard_by_week(
     week_ends = pd.date_range(start=start_date, end=end_date, freq="W")
 
     open_counts = []
+    open_hot_counts = []
     created_counts = []
     resolved_counts = []
 
@@ -63,6 +75,8 @@ def build_defects_dashboard_by_week(
                 (work_df[resolved_col] > week_end)
             )
         )
+
+        open_hot_mask = open_mask & work_df["__is_hot_priority__"]
 
         created_mask = (
             (work_df[created_col] >= week_start) &
@@ -78,12 +92,14 @@ def build_defects_dashboard_by_week(
         open_counts.append(int(open_mask.sum()))
         created_counts.append(int(created_mask.sum()))
         resolved_counts.append(int(resolved_mask.sum()))
+        open_hot_counts.append(int(open_hot_mask.sum()))
 
     delta_counts = [c - r for c, r in zip(created_counts, resolved_counts)]
 
     chart_df = pd.DataFrame({
         "WeekEnd": week_ends,
         "OpenDefects": open_counts,
+        "OpenHotDefects": open_hot_counts,
         "CreatedDefects": created_counts,
         "ResolvedDefects": resolved_counts,
         "BacklogDelta": delta_counts,
@@ -97,11 +113,26 @@ def build_defects_dashboard_by_week(
     )
 
     # 1. Open defects
-    axes[0, 0].plot(chart_df["WeekEnd"], chart_df["OpenDefects"], linewidth=2)
+    axes[0, 0].plot(
+        chart_df["WeekEnd"],
+        chart_df["OpenDefects"],
+        linewidth=2,
+        label="All open defects",
+    )
+
+    axes[0, 0].plot(
+        chart_df["WeekEnd"],
+        chart_df["OpenHotDefects"],
+        linewidth=2,
+        color="red",
+        label="Major/Critical/Urgent open defects",
+    )
+
     axes[0, 0].set_title("Open defects by week")
     axes[0, 0].set_xlabel("Week")
     axes[0, 0].set_ylabel("Open defects")
     axes[0, 0].tick_params(axis="x", rotation=45)
+    axes[0, 0].legend()
 
     # 2. Created defects
     axes[0, 1].plot(chart_df["WeekEnd"], chart_df["CreatedDefects"], linewidth=2)

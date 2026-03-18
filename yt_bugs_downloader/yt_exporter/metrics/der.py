@@ -32,6 +32,14 @@ def _parse_quarter(value):
         return (9999, 9)
 
 
+def _is_target_priority(value) -> bool:
+    if pd.isna(value):
+        return False
+
+    normalized = str(value).strip().lower()
+    return normalized in {"неотложный", "critical", "major"}
+
+
 def build_der_tables(
     df: pd.DataFrame,
     *,
@@ -39,8 +47,9 @@ def build_der_tables(
     quarter_col: str = "C_Qtr",
     ps_links_col: str = "PS links (IDs)",
     status_col: str = "Status",
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    required_cols = [affected_version_col, quarter_col, ps_links_col, status_col]
+    priority_col: str = "Приоритет",
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    required_cols = [affected_version_col, quarter_col, ps_links_col, status_col, priority_col]
     for col in required_cols:
         if col not in df.columns:
             raise RuntimeError(f"Не найдена колонка '{col}' для расчёта DER")
@@ -53,9 +62,11 @@ def build_der_tables(
 
     work_df["__is_escape__"] = work_df[ps_links_col].apply(_has_ps_link)
     work_df["__is_cancelled__"] = work_df[status_col].apply(_is_cancelled_status)
+    work_df["__is_target_priority__"] = work_df[priority_col].apply(_is_target_priority)
 
     # Total = все дефекты, кроме аннулированных
     total_df = work_df[~work_df["__is_cancelled__"]].copy()
+    priority_df = total_df[total_df["__is_target_priority__"]].copy()
 
     # ---------- DER by affected version ----------
     by_version_df = total_df[total_df[affected_version_col] != ""].copy()
@@ -118,7 +129,69 @@ def build_der_tables(
             .reset_index(drop=True)
         )
 
-    return der_by_version, der_by_quarter
+    # ---------- DER by affected version (Urg+Crit+Maj) ----------
+    by_version_prio_df = priority_df[priority_df[affected_version_col] != ""].copy()
+
+    if by_version_prio_df.empty:
+        der_by_version_prio = pd.DataFrame(columns=[
+            "Affected version", "Total defects", "Escapes", "DER", "DER %"
+        ])
+    else:
+        der_by_version_prio = (
+            by_version_prio_df
+            .groupby(affected_version_col, dropna=False)
+            .agg(
+                **{
+                    "Total defects": ("__is_escape__", "size"),
+                    "Escapes": ("__is_escape__", "sum"),
+                }
+            )
+            .reset_index()
+            .rename(columns={affected_version_col: "Affected version"})
+        )
+
+        der_by_version_prio["DER"] = der_by_version_prio["Escapes"] / der_by_version_prio["Total defects"]
+        der_by_version_prio["DER %"] = (der_by_version_prio["DER"] * 100).round(2)
+        der_by_version_prio["DER"] = der_by_version_prio["DER"].round(4)
+
+        der_by_version_prio = der_by_version_prio.sort_values("Affected version").reset_index(drop=True)
+
+    # ---------- DER by quarter (Urg+Crit+Maj) ----------
+    by_quarter_prio_df = priority_df[priority_df[quarter_col] != ""].copy()
+
+    if by_quarter_prio_df.empty:
+        der_by_quarter_prio = pd.DataFrame(columns=[
+            "Quarter", "Total defects", "Escapes", "DER", "DER %"
+        ])
+    else:
+        der_by_quarter_prio = (
+            by_quarter_prio_df
+            .groupby(quarter_col, dropna=False)
+            .agg(
+                **{
+                    "Total defects": ("__is_escape__", "size"),
+                    "Escapes": ("__is_escape__", "sum"),
+                }
+            )
+            .reset_index()
+            .rename(columns={quarter_col: "Quarter"})
+        )
+
+        der_by_quarter_prio["DER"] = der_by_quarter_prio["Escapes"] / der_by_quarter_prio["Total defects"]
+        der_by_quarter_prio["DER %"] = (der_by_quarter_prio["DER"] * 100).round(2)
+        der_by_quarter_prio["DER"] = der_by_quarter_prio["DER"].round(4)
+
+        der_by_quarter_prio["__sort__"] = der_by_quarter_prio["Quarter"].apply(_parse_quarter)
+
+        der_by_quarter_prio = (
+            der_by_quarter_prio
+            .sort_values("__sort__")
+            .drop(columns="__sort__")
+            .reset_index(drop=True)
+        )
+
+
+    return der_by_version, der_by_quarter, der_by_version_prio, der_by_quarter_prio
 
 
 def export_der_excel(
@@ -129,13 +202,15 @@ def export_der_excel(
     quarter_col: str = "C_Qtr",
     ps_links_col: str = "PS links (IDs)",
     status_col: str = "Status",
+    priority_col: str = "Приоритет",
 ) -> str:
-    der_by_version, der_by_quarter = build_der_tables(
+    der_by_version, der_by_quarter, der_by_version_prio, der_by_quarter_prio = build_der_tables(
         df,
         affected_version_col=affected_version_col,
         quarter_col=quarter_col,
         ps_links_col=ps_links_col,
         status_col=status_col,
+        priority_col=priority_col,
     )
 
     output = Path(output_path)
@@ -143,5 +218,7 @@ def export_der_excel(
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         der_by_version.to_excel(writer, index=False, sheet_name="DER by affected version")
         der_by_quarter.to_excel(writer, index=False, sheet_name="DER by quarter")
+        der_by_version_prio.to_excel(writer, index=False, sheet_name="DER by aff ver U_C_M")
+        der_by_quarter_prio.to_excel(writer, index=False, sheet_name="DER by quarter U_C_M")
 
     return str(output)

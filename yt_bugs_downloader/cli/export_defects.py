@@ -82,6 +82,7 @@ def main():
         chart_path,
         created_col="Created",
         resolved_col="Resolved",
+        priority_col="Priority",
         title_prefix=project,
     )
 
@@ -97,6 +98,7 @@ def main():
         quarter_col="C_Qtr",
         ps_links_col="PS links (IDs)",
         status_col="Status",
+        priority_col="Priority",
     )
 
     print(f"Saved: {final_path}")
