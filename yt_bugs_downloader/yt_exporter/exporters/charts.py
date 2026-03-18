@@ -13,6 +13,12 @@ def _is_hot_priority(value) -> bool:
     return normalized in {"major", "critical", "неотложный"}
 
 
+def _has_ps_link(value) -> bool:
+    if pd.isna(value):
+        return False
+    return bool(str(value).strip())
+
+
 def build_defects_dashboard_by_week(
     df: pd.DataFrame,
     output_path: str,
@@ -20,6 +26,7 @@ def build_defects_dashboard_by_week(
     created_col: str = "Created",
     resolved_col: str = "Resolved",
     priority_col: str = "Priority",
+    ps_links_col: str = "PS links (IDs)",
     title_prefix: str = "",
 ) -> str:
     """
@@ -37,12 +44,15 @@ def build_defects_dashboard_by_week(
         raise RuntimeError(f"Не найдена колонка '{resolved_col}'")
     if priority_col not in df.columns:
         raise RuntimeError(f"Не найдена колонка '{priority_col}'")
+    if ps_links_col not in df.columns:
+        raise RuntimeError(f"Не найдена колонка '{ps_links_col}'")
 
     work_df = df.copy()
 
     work_df[created_col] = pd.to_datetime(work_df[created_col], errors="coerce")
     work_df[resolved_col] = pd.to_datetime(work_df[resolved_col], errors="coerce")
     work_df["__is_hot_priority__"] = work_df[priority_col].apply(_is_hot_priority)
+    work_df["__is_ps__"] = work_df[ps_links_col].apply(_has_ps_link)
 
     work_df = work_df[work_df[created_col].notna()].copy()
 
@@ -64,6 +74,7 @@ def build_defects_dashboard_by_week(
     open_hot_counts = []
     created_counts = []
     resolved_counts = []
+    open_ps_counts = []
 
     for week_end in week_ends:
         week_start = week_end - pd.Timedelta(days=6)
@@ -77,6 +88,7 @@ def build_defects_dashboard_by_week(
         )
 
         open_hot_mask = open_mask & work_df["__is_hot_priority__"]
+        open_ps_mask = open_mask & work_df["__is_ps__"]
 
         created_mask = (
             (work_df[created_col] >= week_start) &
@@ -93,6 +105,7 @@ def build_defects_dashboard_by_week(
         created_counts.append(int(created_mask.sum()))
         resolved_counts.append(int(resolved_mask.sum()))
         open_hot_counts.append(int(open_hot_mask.sum()))
+        open_ps_counts.append(int(open_ps_mask.sum()))
 
     delta_counts = [c - r for c, r in zip(created_counts, resolved_counts)]
 
@@ -100,6 +113,7 @@ def build_defects_dashboard_by_week(
         "WeekEnd": week_ends,
         "OpenDefects": open_counts,
         "OpenHotDefects": open_hot_counts,
+        "OpenPSDefects": open_ps_counts,
         "CreatedDefects": created_counts,
         "ResolvedDefects": resolved_counts,
         "BacklogDelta": delta_counts,
@@ -125,7 +139,15 @@ def build_defects_dashboard_by_week(
         chart_df["OpenHotDefects"],
         linewidth=2,
         color="red",
-        label="Major/Critical/Urgent open defects",
+        label="Major/Critical/Urgent",
+    )
+
+    axes[0, 0].plot(
+        chart_df["WeekEnd"],
+        chart_df["OpenPSDefects"],
+        linewidth=2,
+        color="black",
+        label="PS-linked defects",
     )
 
     axes[0, 0].set_title("Open defects by week")

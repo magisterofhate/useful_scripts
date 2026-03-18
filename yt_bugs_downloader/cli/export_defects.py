@@ -83,6 +83,7 @@ def main():
         created_col="Created",
         resolved_col="Resolved",
         priority_col="Priority",
+        ps_links_col="PS links (IDs)",
         title_prefix=project,
     )
 
