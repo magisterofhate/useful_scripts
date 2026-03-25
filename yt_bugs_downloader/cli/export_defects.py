@@ -46,6 +46,7 @@ def main():
 
     fields = (
         "id,idReadable,summary,created,resolved,"
+        "tags(name),"
         "customFields(name,value(name,localizedName,fullName,login,idReadable,values(name,localizedName,fullName,login,idReadable))),"
         "links(direction,linkType(name,localizedName),issues(idReadable,project(shortName),customFields(name,value(name,localizedName,fullName,login,idReadable,values(name,localizedName,fullName,login,idReadable)))))"
     )
@@ -62,7 +63,6 @@ def main():
         field_release=s.field_release,
         field_bill_subsystem=s.field_bill_subsystem,
         field_bill_category=s.field_bill_category,
-        field_bill_tags=s.field_bill_tags,
         ps_project=s.ps_project,
         ps_version_field=s.ps_version_field,
     )

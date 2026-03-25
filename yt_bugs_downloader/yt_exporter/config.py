@@ -38,7 +38,6 @@ class Settings:
 
     field_bill_subsystem: str
     field_bill_category: str
-    field_bill_tags: str
 
     ps_project: str
     ps_version_field: str
@@ -82,7 +81,7 @@ def load_settings() -> Settings:
 
         field_bill_subsystem=os.getenv("FIELD_BILL_SUBSYSTEM", "Подсистема"),
         field_bill_category=os.getenv("FIELD_BILL_CATEGORY", "Категория BILL"),
-        field_bill_tags=os.getenv("FIELD_BILL_TAGS", "Тэги"),
+
 
         field_status=os.getenv("FIELD_STATUS", "State"),
         field_priority=os.getenv("FIELD_PRIORITY", "Priority"),

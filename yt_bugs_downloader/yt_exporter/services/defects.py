@@ -74,6 +74,21 @@ def get_custom_field(issue: Dict[str, Any], field_name: str) -> str:
     return ""
 
 
+def get_issue_tags(issue: Dict[str, Any]) -> str:
+    tags = issue.get("tags") or []
+    names: List[str] = []
+
+    for tag in tags:
+        if isinstance(tag, dict):
+            name = (tag.get("name") or "").strip()
+            if name:
+                names.append(name)
+
+    # dedupe with order preserved
+    names = list(dict.fromkeys(names))
+    return ", ".join(names)
+
+
 def normalize_ps_version(v: str) -> str:
     if not v:
         return ""
@@ -157,12 +172,11 @@ def build_ba_row(
     issue: Dict[str, Any],
     field_bill_subsystem: str,
     field_bill_category: str,
-    field_bill_tags: str,
 ) -> Dict[str, Any]:
     row = dict(common_row)
     row["Подсистема"] = get_custom_field(issue, field_bill_subsystem)
     row["Категория BILL"] = get_custom_field(issue, field_bill_category)
-    row["Тэги"] = get_custom_field(issue, field_bill_tags)
+    row["Тэги"] = get_issue_tags(issue)
     return row
 
 
@@ -176,7 +190,6 @@ def build_defects_dataframe(
     field_release: str,
     field_bill_subsystem: str,
     field_bill_category: str,
-    field_bill_tags: str,
     ps_project: str,
     ps_version_field: str,
 ) -> Tuple[pd.DataFrame, ExportStats]:
@@ -273,7 +286,6 @@ def build_defects_dataframe(
                 issue=it,
                 field_bill_subsystem=field_bill_subsystem,
                 field_bill_category=field_bill_category,
-                field_bill_tags=field_bill_tags,
             )
         else:
             raise ValueError(f"Unsupported project: {project}")
