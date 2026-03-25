@@ -35,6 +35,11 @@ class Settings:
     field_status: str
     field_priority: str
     field_release: str
+
+    field_bill_subsystem: str
+    field_bill_category: str
+    field_bill_tags: str
+
     ps_project: str
     ps_version_field: str
     issue_type_defect: str        # "Ошибка" / "Bug" etc.
@@ -74,6 +79,10 @@ def load_settings() -> Settings:
 
         allowed_projects=allowed_projects,
         file_prefix_by_project=file_prefix_by_project,
+
+        field_bill_subsystem=os.getenv("FIELD_BILL_SUBSYSTEM", "Подсистема"),
+        field_bill_category=os.getenv("FIELD_BILL_CATEGORY", "Категория BILL"),
+        field_bill_tags=os.getenv("FIELD_BILL_TAGS", "Тэги"),
 
         field_status=os.getenv("FIELD_STATUS", "State"),
         field_priority=os.getenv("FIELD_PRIORITY", "Priority"),

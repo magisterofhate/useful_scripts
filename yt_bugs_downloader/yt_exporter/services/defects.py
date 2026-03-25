@@ -8,6 +8,30 @@ import re
 import numpy as np
 import pandas as pd
 
+COMMON_COLUMNS = [
+    "id",
+    "summary",
+    "Status",
+    "Priority",
+    "Created",
+    "C_Qtr",
+    "C_Mnt",
+    "Resolved",
+    "R_Qtr",
+    "R_Mnt",
+    "Lifetime",
+    "Release",
+    "Affected version",
+    "Fix version",
+    "PS links (IDs)",
+    "PS_Версия",
+]
+
+BA_EXTRA_COLUMNS = [
+    "Подсистема",
+    "Категория BILL",
+    "Тэги",
+]
 
 @dataclass
 class ExportStats:
@@ -77,13 +101,82 @@ def calc_quarter_month(date_str: Optional[str]) -> Tuple[str, str]:
     return quarter, month
 
 
+def build_common_row(
+    *,
+    issue: Dict[str, Any],
+    issue_id: str,
+    summary: str,
+    created: str,
+    resolved_str: str,
+    status: str,
+    priority: str,
+    release: str,
+    created_qtr: str,
+    created_mnt: str,
+    resolved_qtr: str,
+    resolved_mnt: str,
+    lifetime: str,
+    ps_ids: List[str],
+    ps_versions: List[str],
+) -> Dict[str, Any]:
+    affected_version = ps_versions[0] if ps_ids and ps_versions else ""
+
+    release_normalized = release.strip().lower().replace("ё", "е") if release else ""
+    if release_normalized.startswith("не определ"):
+        fix_version = ""
+    else:
+        fix_version = release if release else ""
+
+    return {
+        "id": issue_id,
+        "summary": summary,
+        "Status": status,
+        "Priority": priority,
+        "Created": created or "",
+        "C_Qtr": created_qtr,
+        "C_Mnt": created_mnt,
+        "Resolved": resolved_str or "",
+        "R_Qtr": resolved_qtr,
+        "R_Mnt": resolved_mnt,
+        "Lifetime": lifetime,
+        "Release": release,
+        "Affected version": affected_version,
+        "Fix version": fix_version,
+        "PS links (IDs)": ", ".join(ps_ids),
+        "PS_Версия": ", ".join(ps_versions),
+    }
+
+
+def build_vm_dci_row(common_row: Dict[str, Any]) -> Dict[str, Any]:
+    return common_row
+
+
+def build_ba_row(
+    common_row: Dict[str, Any],
+    *,
+    issue: Dict[str, Any],
+    field_bill_subsystem: str,
+    field_bill_category: str,
+    field_bill_tags: str,
+) -> Dict[str, Any]:
+    row = dict(common_row)
+    row["Подсистема"] = get_custom_field(issue, field_bill_subsystem)
+    row["Категория BILL"] = get_custom_field(issue, field_bill_category)
+    row["Тэги"] = get_custom_field(issue, field_bill_tags)
+    return row
+
+
 def build_defects_dataframe(
     issues: List[Dict[str, Any]],
     *,
+    project: str,
     resolved_cutoff: str,
     field_status: str,
     field_priority: str,
     field_release: str,
+    field_bill_subsystem: str,
+    field_bill_category: str,
+    field_bill_tags: str,
     ps_project: str,
     ps_version_field: str,
 ) -> Tuple[pd.DataFrame, ExportStats]:
@@ -154,24 +247,49 @@ def build_defects_dataframe(
         if ps_ids:
             stats.kept_with_ps_links += 1
 
-        rows.append({
-            "id": issue_id,
-            "summary": summary,
-            "Status": status,
-            "Priority": priority,
-            "Created": created or "",
-            "C_Qtr": created_qtr,
-            "C_Mnt": created_mnt,
-            "Resolved": resolved_str or "",
-            "R_Qtr": resolved_qtr,
-            "R_Mnt": resolved_mnt,
-            "Lifetime": lifetime,
-            "Release": release,
-            "Affected version": affected_version,
-            "Fix version": fix_version,
-            "PS links (IDs)": ", ".join(ps_ids),
-            f"PS_{ps_version_field}": ", ".join(ps_versions),
-        })
+        common_row = build_common_row(
+            issue=it,
+            issue_id=issue_id,
+            summary=summary,
+            created=created,
+            resolved_str=resolved_str,
+            status=status,
+            priority=priority,
+            release=release,
+            created_qtr=created_qtr,
+            created_mnt=created_mnt,
+            resolved_qtr=resolved_qtr,
+            resolved_mnt=resolved_mnt,
+            lifetime=lifetime,
+            ps_ids=ps_ids,
+            ps_versions=ps_versions,
+        )
+
+        if project in {"VM", "DCI6"}:
+            row = build_vm_dci_row(common_row)
+        elif project == "BA":
+            row = build_ba_row(
+                common_row,
+                issue=it,
+                field_bill_subsystem=field_bill_subsystem,
+                field_bill_category=field_bill_category,
+                field_bill_tags=field_bill_tags,
+            )
+        else:
+            raise ValueError(f"Unsupported project: {project}")
+
+        rows.append(row)
+
+    if project == "BA":
+        expected_columns = COMMON_COLUMNS + BA_EXTRA_COLUMNS
+    else:
+        expected_columns = COMMON_COLUMNS
 
     df = pd.DataFrame(rows)
+
+    for col in expected_columns:
+        if col not in df.columns:
+            df[col] = ""
+
+    df = df[expected_columns]
     return df, stats

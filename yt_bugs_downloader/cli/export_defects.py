@@ -55,10 +55,14 @@ def main():
 
     df, stats = build_defects_dataframe(
         issues,
+        project=project,
         resolved_cutoff=s.resolved_cutoff,
         field_status=s.field_status,
         field_priority=s.field_priority,
         field_release=s.field_release,
+        field_bill_subsystem=s.field_bill_subsystem,
+        field_bill_category=s.field_bill_category,
+        field_bill_tags=s.field_bill_tags,
         ps_project=s.ps_project,
         ps_version_field=s.ps_version_field,
     )
