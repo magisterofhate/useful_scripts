@@ -10,7 +10,10 @@ from yt_bugs_downloader.yt_exporter.api.youtrack import YouTrackClient
 from yt_bugs_downloader.yt_exporter.services.defects import build_defects_dataframe
 from yt_bugs_downloader.yt_exporter.services.versions import collect_versions
 from yt_bugs_downloader.yt_exporter.exporters.excel import export_excel
-from yt_bugs_downloader.yt_exporter.exporters.charts import build_defects_dashboard_by_week
+from yt_bugs_downloader.yt_exporter.exporters.charts import (
+    build_defects_dashboard_by_week,
+    build_open_vs_ps_linked_chart_by_week,
+)
 from yt_bugs_downloader.yt_exporter.metrics.der import export_der_excel
 
 
@@ -69,7 +72,6 @@ def main():
 
     versions = collect_versions(project)  # если нужно — можно сделать optional флагом
 
-
     final_path, coral_count, fix_filled, affected_filled = export_excel(
         df,
         out_path,
@@ -87,6 +89,20 @@ def main():
         created_col="Created",
         resolved_col="Resolved",
         priority_col="Priority",
+        ps_links_col="PS links (IDs)",
+        title_prefix=project,
+    )
+
+    open_ps_chart_path = str(
+        excel_path_obj.with_name(f"{excel_path_obj.stem}_open_vs_ps_linked.png")
+    )
+
+    build_open_vs_ps_linked_chart_by_week(
+        df,
+        open_ps_chart_path,
+        start_date=s.open_ps_chart_start_date,
+        created_col="Created",
+        resolved_col="Resolved",
         ps_links_col="PS links (IDs)",
         title_prefix=project,
     )
@@ -117,6 +133,7 @@ def main():
     print(f"Автозаполнено Fix version:             {fix_filled}")
     print(f"Автозаполнено Affected version:        {affected_filled}")
     print(f"Chart saved:                           {chart_path}")
+    print(f"Open vs PS-linked chart saved:         {open_ps_chart_path}")
     print(f"DER saved:                             {der_path}")
     print("===================")
 

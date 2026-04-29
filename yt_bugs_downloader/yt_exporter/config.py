@@ -26,6 +26,7 @@ class Settings:
     # Filters / business rules
     resolved_cutoff: str          # YYYY-MM-DD
     created_from: Optional[str]   # YYYY-MM-DD or None
+    open_ps_chart_start_date: str
 
     # Allowed projects + filename prefixes
     allowed_projects: Set[str]
@@ -75,6 +76,10 @@ def load_settings() -> Settings:
 
         resolved_cutoff=os.getenv("RESOLVED_CUTOFF", "2024-07-01").strip(),
         created_from=os.getenv("CREATED_FROM", "").strip() or None,
+        open_ps_chart_start_date=os.getenv(
+            "OPEN_PS_CHART_START_DATE",
+            "2026-01-01"
+        ).strip(),
 
         allowed_projects=allowed_projects,
         file_prefix_by_project=file_prefix_by_project,
